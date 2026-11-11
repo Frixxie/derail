@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Derail.Benchmarks/Derail.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Derail/Derail.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Derail.Tests/Derail.Tests.csproj" />
+  </Folder>
+</Solution>
