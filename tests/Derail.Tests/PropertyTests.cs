@@ -1,3 +1,4 @@
+using FsCheck;
 using FsCheck.Xunit;
 using Derail;
 
@@ -50,4 +51,118 @@ public class OptionProperties
     [Property]
     public bool Where_False_IsNone(bool some, int value) =>
         Make(some, value).Where(_ => false).IsNone;
+}
+
+public class ValidationProperties
+{
+    private static Validation<T, string> Make<T>(bool ok, T value, NonEmptyArray<string> errors) =>
+        ok ? Validation.Valid<T, string>(value) : Validation.Invalid<T, string>(errors.Get[0], errors.Get[1..]);
+
+    private static Validation<int, string> Make(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make<int>(ok, value, errors);
+
+    private static Validation<Func<int, int>, string> MakeFn(bool ok, int k, NonEmptyArray<string> errors) =>
+        Make<Func<int, int>>(ok, x => x + k, errors);
+
+    private static IReadOnlyList<string> Errors<T>(Validation<T, string> v) => v.Match(_ => [], e => e);
+
+    [Property]
+    public bool Map_Identity(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).Map(x => x).Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool Map_Composition(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).Map(x => x + 1).Map(x => x * 3)
+            .Equals(Make(ok, value, errors).Map(x => (x + 1) * 3));
+
+    [Property]
+    public bool Apply_Identity(bool ok, int value, NonEmptyArray<string> errors) =>
+        Validation.Valid<Func<int, int>, string>(x => x).Apply(Make(ok, value, errors))
+            .Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool Apply_Homomorphism(int k, int value) =>
+        Validation.Valid<Func<int, int>, string>(x => x + k).Apply(Validation.Valid<int, string>(value))
+            .Equals(Validation.Valid<int, string>(value + k));
+
+    [Property]
+    public bool Apply_Interchange(bool ok, int k, NonEmptyArray<string> errors, int y) =>
+        MakeFn(ok, k, errors).Apply(Validation.Valid<int, string>(y))
+            .Equals(Validation.Valid<Func<Func<int, int>, int>, string>(f => f(y)).Apply(MakeFn(ok, k, errors)));
+
+    [Property]
+    public bool Apply_Composition(
+        bool uOk, int uK, NonEmptyArray<string> uErrors,
+        bool vOk, int vK, NonEmptyArray<string> vErrors,
+        bool wOk, int w, NonEmptyArray<string> wErrors)
+    {
+        var u = MakeFn(uOk, uK, uErrors);
+        var v = MakeFn(vOk, vK, vErrors);
+        var x = Make(wOk, w, wErrors);
+        Func<Func<int, int>, Func<Func<int, int>, Func<int, int>>> compose = f => g => a => f(g(a));
+
+        return Validation.Valid<Func<Func<int, int>, Func<Func<int, int>, Func<int, int>>>, string>(compose)
+            .Apply(u).Apply(v).Apply(x)
+            .Equals(u.Apply(v.Apply(x)));
+    }
+
+    [Property]
+    public bool Zip_LeftUnit(bool ok, int value, NonEmptyArray<string> errors) =>
+        Validation.Valid<ValueTuple, string>(default).Zip(Make(ok, value, errors), (_, x) => x)
+            .Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool Zip_RightUnit(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).Zip(Validation.Valid<ValueTuple, string>(default), (x, _) => x)
+            .Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool Zip_Associativity(
+        bool aOk, int a, NonEmptyArray<string> aErrors,
+        bool bOk, int b, NonEmptyArray<string> bErrors,
+        bool cOk, int c, NonEmptyArray<string> cErrors)
+    {
+        var va = Make(aOk, a, aErrors);
+        var vb = Make(bOk, b, bErrors);
+        var vc = Make(cOk, c, cErrors);
+
+        return va.Zip(vb, (x, y) => (x, y)).Zip(vc, (xy, z) => (xy.x, xy.y, z))
+            .Equals(va.Zip(vb.Zip(vc, (y, z) => (y, z)), (x, yz) => (x, yz.y, yz.z)));
+    }
+
+    [Property]
+    public bool Zip_ConcatenatesErrorsInOrder(
+        bool aOk, int a, NonEmptyArray<string> aErrors,
+        bool bOk, int b, NonEmptyArray<string> bErrors)
+    {
+        var va = Make(aOk, a, aErrors);
+        var vb = Make(bOk, b, bErrors);
+        return Errors(va.Zip(vb, (x, y) => x + y)).SequenceEqual([.. Errors(va), .. Errors(vb)]);
+    }
+
+    [Property]
+    public bool Sequence_IsValidExactlyWhenAllAre_AndPreservesOrder((bool ok, int value, NonEmptyArray<string> errors)[] items)
+    {
+        var validations = items.Select(i => Make(i.ok, i.value, i.errors)).ToList();
+        var sequenced = Validation.Sequence(validations);
+
+        return sequenced.Match(
+            values => validations.All(v => v.IsValid) && values.SequenceEqual(items.Select(i => i.value)),
+            errors => validations.Any(v => v.IsInvalid) && errors.SequenceEqual(validations.SelectMany(Errors)));
+    }
+
+    [Property]
+    public bool MapErrors_Identity(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).MapErrors(e => e).Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool MapErrors_Composition(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).MapErrors(e => e + "!").MapErrors(e => e.Length)
+            .Equals(Make(ok, value, errors).MapErrors(e => (e + "!").Length));
+
+    [Property]
+    public bool ToResult_PreservesValueAndErrors(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).ToResult().Match(
+            v => ok && v == value,
+            e => !ok && e.SequenceEqual(errors.Get));
 }
