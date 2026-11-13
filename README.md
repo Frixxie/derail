@@ -7,8 +7,11 @@ Railway-oriented programming for C#, built on the native `union` types in C# 15 
 - **`Option<T>`** — a value that may be absent: `Some<T>` or `None`.
 - **`Result<T, TError>`** — an operation that may fail: `Ok<T>` or `Error<TError>`. Stops at the first error.
 - **`Validation<T, TError>`** — independent checks: `Valid<T>` or `Invalid<TError>`. Collects every error.
+- **`NonEmpty<T>`** — an immutable ordered collection with a required first element.
+- **`Writer<T, TEvent>`** — a value paired with ordered events, without emitting them.
+- **`Reader<TEnv, T>` / `ReaderResult<TEnv, T, TError>`** — reusable computations with explicit dependencies.
 
-Because the cases are real union members, you get exhaustive `switch` expressions and implicit conversions from each case for free.
+Option, Result, and Validation use real union members, giving you exhaustive `switch` expressions and implicit conversions from each case for free.
 
 ## Requirements
 
@@ -126,6 +129,70 @@ var welcome = ValidateApplication(owner, number, deposit)
     .Map(a => $"Welcome, {a.Owner}");
 ```
 
+### NonEmpty: require at least one item
+
+```csharp
+var batch = NonEmpty.FromEnumerable(new[] { 1, 2, 3 })
+    .ToResult(() => "At least one item is required");
+
+var total = batch.Map(items => items.Map(x => x * 2).Sum()); // Ok(12)
+var required = new NonEmpty<int>(1, 2, 3);
+```
+
+`NonEmpty<T>` implements `IReadOnlyList<T>` with `Head`, `Tail`, and `Count`.
+Construction snapshots the input; `Map` and `Append` preserve order and non-emptiness.
+It is a sealed class: `default` is null, not a constructed empty collection.
+Ordinary LINQ operations such as `Where` still return ordinary sequences that may be empty.
+
+### Writer: return events instead of emitting them
+
+```csharp
+var workflow =
+    from first in new Writer<int, string>(2, ["first"])
+    from second in new Writer<int, string>(3, ["second"])
+    select first + second;
+
+var (value, events) = workflow; // 5, ["first", "second"]
+```
+
+Writer composition is eager, but events are only data: nothing is logged or published.
+`Map` preserves events; `Bind` and `Zip` append them left-to-right; `MapEvents` transforms them.
+`Writer.Pure<T, TEvent>(value)` starts without events, and `Writer.Tell(event)` records
+one event with a `ValueTuple` result. Event inputs are snapshotted, and callers own delivery policy.
+
+### Reader: compose computations with explicit dependencies
+
+```csharp
+var reader =
+    from first in Reader.Ask<int>()
+    from second in new Reader<int, int>(env => env * 2)
+    select first + second;
+
+var value = reader.Local<string>(text => text.Length).Run("test"); // 12
+```
+
+`Reader` defers work until `Run`, uses the same environment throughout `Bind` and `Zip`,
+and reruns the computation on each invocation. `Local` adapts an outer environment;
+`Reader.Pure<TEnv, T>(value)` ignores it. Delegates and reference values are not cloned,
+and neither purity nor thread safety is enforced.
+
+`ReaderResult<TEnv, T, TError>` combines this with Derail's short-circuiting `Result`:
+
+```csharp
+var checkedReader = new ReaderResult<int, int, string>(quantity => quantity > 0
+    ? Result.Ok<int, string>(quantity)
+    : Result.Error<int, string>("Quantity must be positive"));
+
+var doubled = checkedReader.Map(quantity => quantity * 2).Run(3); // Ok(6)
+```
+
+It supports `Map`, `MapError`, `Bind`, `Recover`, `Zip`, `Local`, and LINQ.
+`Zip` never runs the right computation after a left error. `Recover` handles an error
+with another computation using the same environment. `ReaderResult.FromReader<TEnv, T, TError>`
+lifts an infallible reader, and `ToReader()` exposes the underlying result-valued reader.
+See [`PrimitiveExamples.cs`](tests/Derail.Tests/PrimitiveExamples.cs) for an example
+combining a fallible Reader with Writer events. Validation's existing error API is unchanged.
+
 ### Async
 
 `MapAsync`/`BindAsync` lift async functions, and the same combinators work directly on `Task<Result<…>>` and `Task<Option<…>>`, so async pipelines read like sync ones:
@@ -155,14 +222,34 @@ Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currenc
 
 ```sh
 dotnet build
-dotnet test tests/Derail.Tests
+dotnet test --project tests/Derail.Tests
 dotnet run -c Release --project benchmarks/Derail.Benchmarks
 ```
+
+### Dev container
+
+Open the repository in a Dev Containers-compatible editor and choose **Reopen in Container**.
+The container uses .NET SDK `11.0.100`, matching `global.json`, runs as a non-root user,
+and restores packages on creation. Run the commands above in its terminal.
+
+Without an editor or a locally installed SDK, use the same image through Docker:
+
+```sh
+docker build -t derail-dev .devcontainer
+docker run --rm --init --user "$(id -u):$(id -g)" \
+  --env DOTNET_CLI_HOME=/tmp/dotnet --env NUGET_PACKAGES=/tmp/nuget \
+  --mount type=bind,source="$PWD",target=/workspaces/derail \
+  derail-dev dotnet test --project tests/Derail.Tests
+```
+
+`--init` keeps the test runner out of PID 1 and allows it to exit normally.
+The explicit user prevents root-owned build files on Linux; the CLI home and package cache
+are disposable directories inside the container. Only the repository is mounted from the host.
 
 ## Layout
 
 ```
-src/Derail/                  Library: Option, Result, Validation, async extensions
+src/Derail/                  Library: Option, Result, Validation, NonEmpty, Writer, Reader, async extensions
 tests/Derail.Tests/          Unit, property-based and example tests
 benchmarks/Derail.Benchmarks BenchmarkDotNet benchmarks
 ```
