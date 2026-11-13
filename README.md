@@ -226,6 +226,9 @@ dotnet test --project tests/Derail.Tests
 dotnet run -c Release --project benchmarks/Derail.Benchmarks
 ```
 
+See [the benchmark guide](benchmarks/README.md) for focused runs, baselines,
+allocation measurements, and improvement candidates.
+
 ### Dev container
 
 Open the repository in a Dev Containers-compatible editor and choose **Reopen in Container**.
