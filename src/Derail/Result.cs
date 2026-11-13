@@ -40,18 +40,31 @@ public static class ResultExtensions
 
         /// <summary>Transforms the success value.</summary>
         public Result<TResult, TError> Map<TResult>(Func<T, TResult> map) =>
-            result.Match(v => Result.Ok<TResult, TError>(map(v)), Result.Error<TResult, TError>);
+            result switch
+            {
+                Ok<T> o => new Ok<TResult>(map(o.Value)),
+                Error<TError> e => e,
+            };
 
         /// <summary>Transforms the error value.</summary>
         public Result<T, TNewError> MapError<TNewError>(Func<TError, TNewError> map) =>
-            result.Match(Result.Ok<T, TNewError>, e => Result.Error<T, TNewError>(map(e)));
+            result switch
+            {
+                Ok<T> o => o,
+                Error<TError> e => new Error<TNewError>(map(e.Value)),
+            };
 
         /// <summary>Chains a result-returning function when successful.</summary>
         public Result<TResult, TError> Bind<TResult>(Func<T, Result<TResult, TError>> bind) =>
             result.Match(bind, Result.Error<TResult, TError>);
 
         /// <summary>Returns the success value, or <paramref name="fallback"/> on failure.</summary>
-        public T GetValueOrDefault(T fallback) => result.Match(v => v, _ => fallback);
+        public T GetValueOrDefault(T fallback) =>
+            result switch
+            {
+                Ok<T> o => o.Value,
+                Error<TError> => fallback,
+            };
 
         /// <summary>Discards the error, keeping the success value as an option.</summary>
         public Option<T> ToOption() => result.Match(Option.Some, _ => Option.None);

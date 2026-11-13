@@ -65,6 +65,51 @@ public class NonEmptyTests
         enumerations.Should().Be(1);
     }
 
+    [Fact]
+    public void FromEnumerable_SnapshotsMutableInput()
+    {
+        var source = new[] { 1, 2, 3 };
+        var result = NonEmpty.FromEnumerable(source);
+        source[0] = 99;
+        source[1] = 99;
+
+        result.Match(values => values.ToArray(), () => []).Should().Equal(1, 2, 3);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FromEnumerable_DisposesTheEnumerator(bool hasValue)
+    {
+        var disposed = false;
+        IEnumerable<int> Source()
+        {
+            try
+            {
+                if (hasValue) yield return 42;
+            }
+            finally { disposed = true; }
+        }
+
+        var result = NonEmpty.FromEnumerable(Source());
+
+        disposed.Should().BeTrue();
+        result.IsSome.Should().Be(hasValue);
+    }
+
+    [Fact]
+    public void Map_VisitsEveryElementExactlyOnceInOrder()
+    {
+        var visited = new List<int>();
+        var values = new NonEmpty<int>(1, 2, 3);
+
+        var mapped = values.Map(x => { visited.Add(x); return x * 2; });
+
+        visited.Should().Equal(1, 2, 3);
+        mapped.Should().Equal(2, 4, 6);
+        values.Should().Equal(1, 2, 3);
+    }
+
     [Property]
     public bool FromEnumerable_RoundTrips(NonEmptyArray<int> source) =>
         NonEmpty.FromEnumerable(source.Get).Match(values => values.SequenceEqual(source.Get), () => false);

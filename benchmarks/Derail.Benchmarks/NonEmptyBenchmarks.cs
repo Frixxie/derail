@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 
 namespace Derail.Benchmarks;
@@ -46,7 +47,8 @@ public class NonEmptyConstructionBenchmarks
         _values = Enumerable.Range(0, Count).ToArray();
         _singletons = _values.Select(x => new NonEmpty<int>(x)).ToArray();
         if (!HeadAndTail().SequenceEqual(AppendSingletons())
-            || !FromEnumerable().Match(values => values.SequenceEqual(_values), () => false))
+            || !FromEnumerable().Match(values => values.SequenceEqual(_values), () => false)
+            || !SnapshotThenConstruct().Match(values => values.SequenceEqual(_values), () => false))
             throw new InvalidOperationException("Constructed values differ");
     }
 
@@ -55,6 +57,14 @@ public class NonEmptyConstructionBenchmarks
 
     [Benchmark]
     public Option<NonEmpty<int>> FromEnumerable() => NonEmpty.FromEnumerable(_values);
+
+    // The original conversion strategy: snapshot the input, then snapshot its tail.
+    [Benchmark]
+    public Option<NonEmpty<int>> SnapshotThenConstruct()
+    {
+        var items = _values.ToImmutableArray();
+        return items.IsEmpty ? Option.None : Option.Some(new NonEmpty<int>(items[0], items.AsSpan()[1..]));
+    }
 
     [Benchmark]
     public NonEmpty<int> AppendSingletons()

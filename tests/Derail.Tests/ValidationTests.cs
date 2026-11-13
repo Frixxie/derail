@@ -177,6 +177,60 @@ public class ValidationTests
         public void AccumulatesAllErrors() =>
             Validation.Sequence([Parse("x"), Parse("1"), Parse("y")]).Match(_ => "", e => string.Join(",", e))
                 .Should().Be("'x' is not a number,'y' is not a number");
+
+        [Fact]
+        public void DefaultInvalid_RemainsInvalidEvenWithoutErrors()
+        {
+            Validation<int, string> invalid = default(Invalid<string>);
+            var result = Validation.Sequence([Parse("1"), invalid, Parse("2")]);
+
+            result.IsInvalid.Should().BeTrue();
+            result.Match(_ => ["unexpected success"], errors => errors).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void EnumeratesOnceAndContinuesAfterAnInvalidItem()
+        {
+            var enumerations = 0;
+            var visited = new List<int>();
+            IEnumerable<Validation<int, string>> Source()
+            {
+                enumerations++;
+                if (enumerations > 1) throw new InvalidOperationException("Enumerated twice");
+                visited.Add(1);
+                yield return Validation.Invalid<int, string>("first", "second");
+                visited.Add(2);
+                yield return Parse("2");
+                visited.Add(3);
+                yield return Validation.Invalid<int, string>("third");
+            }
+
+            var result = Validation.Sequence(Source());
+
+            result.Match(_ => [], errors => errors).Should().Equal("first", "second", "third");
+            visited.Should().Equal(1, 2, 3);
+            enumerations.Should().Be(1);
+        }
+
+        [Fact]
+        public void DefaultUnion_IsRejectedRatherThanSilentlySkipped()
+        {
+            var act = () => Validation.Sequence(new[] { default(Validation<int, string>) });
+
+            act.Should().Throw<System.Runtime.CompilerServices.SwitchExpressionException>();
+        }
+
+        [Fact]
+        public void ResultsAreIndependentSnapshots()
+        {
+            var items = new[] { Parse("1"), Parse("2") };
+            var first = Validation.Sequence(items);
+            items[0] = Parse("3");
+            var second = Validation.Sequence(items);
+
+            first.Match(values => values, _ => []).Should().Equal(1, 2);
+            second.Match(values => values, _ => []).Should().Equal(3, 2);
+        }
     }
 
     public class Conversions

@@ -14,10 +14,12 @@ public readonly struct Invalid<TError> : IEquatable<Invalid<TError>>
     public Invalid(TError error, params ReadOnlySpan<TError> more) =>
         _errors = [error, .. more];
 
-    private Invalid(ImmutableArray<TError> errors) => _errors = errors;
+    internal Invalid(ImmutableArray<TError> errors) => _errors = errors;
 
     /// <summary>The errors. Empty only for <c>default</c>.</summary>
     public IReadOnlyList<TError> Errors => _errors.IsDefault ? [] : _errors;
+
+    internal ReadOnlySpan<TError> ErrorSpan => _errors.AsSpan();
 
     public void Deconstruct(out IReadOnlyList<TError> errors) => errors = Errors;
 
@@ -55,11 +57,33 @@ public static class Validation
         new Invalid<TError>(error, more);
 
     /// <summary>Turns many validations into one: all values when every item is valid, otherwise every error.</summary>
-    public static Validation<IReadOnlyList<T>, TError> Sequence<T, TError>(IEnumerable<Validation<T, TError>> validations) =>
-        validations.Aggregate(
-            Valid<ImmutableList<T>, TError>([]),
-            (acc, next) => acc.Zip(next, (values, value) => values.Add(value)))
-            .Map(IReadOnlyList<T> (values) => values);
+    public static Validation<IReadOnlyList<T>, TError> Sequence<T, TError>(IEnumerable<Validation<T, TError>> validations)
+    {
+        ArgumentNullException.ThrowIfNull(validations);
+        var values = ImmutableArray.CreateBuilder<T>();
+        ImmutableArray<TError>.Builder? errors = null;
+
+        foreach (var validation in validations)
+        {
+            switch (validation)
+            {
+                case Valid<T> valid:
+                    if (errors is null) values.Add(valid.Value);
+                    break;
+                case Invalid<TError> invalid:
+                    // Presence of the builder records failure even for default(Invalid<TError>).
+                    errors ??= ImmutableArray.CreateBuilder<TError>();
+                    errors.AddRange(invalid.ErrorSpan);
+                    break;
+                default:
+                    throw new System.Runtime.CompilerServices.SwitchExpressionException(validation);
+            }
+        }
+
+        return errors is null
+            ? new Valid<IReadOnlyList<T>>(values.DrainToImmutable())
+            : new Invalid<TError>(errors.DrainToImmutable());
+    }
 }
 
 /// <summary>Combinators for <see cref="Validation{T, TError}"/>.</summary>

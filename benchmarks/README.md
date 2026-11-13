@@ -42,6 +42,8 @@ timing. Fixtures are synthetic and created outside the timed methods.
 - NonEmpty arrays and singleton fixtures are prepared in setup. The singleton
   append case therefore measures concatenation, not singleton creation; at count
   one it simply returns the existing singleton.
+  `SnapshotThenConstruct` retains the original conversion algorithm as a local
+  comparison, so conversion changes can be checked for both allocation and latency.
 - Writer `Bulk` receives precomputed events and isolates snapshot cost. Unlike
   `Direct` and `Bind`, it does not compute events inside the timed method. There
   is no event delivery, logging, or I/O in these workloads.
@@ -56,7 +58,8 @@ timing. Fixtures are synthetic and created outside the timed methods.
 
 ## Improvement candidates
 
-These are hypotheses from the implementation, not changes made by the benchmark suite:
+These were the hypotheses at the initial benchmark revision (`2064b105`), before
+the optimization work below:
 
 1. **Writer event accumulation:** repeated immutable-array concatenation copies
    the accumulated prefix on every bind, giving quadratic total copying for a
@@ -118,4 +121,61 @@ dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
 ```
 
 The full generated reports remain in the local artifacts directory, outside version
-control. No library implementations were changed as part of this investigation.
+control. No library implementations were changed in the initial benchmark revision.
+
+## Optimization approach
+
+- `Validation.Sequence` uses method-local immutable-array builders, freezing the
+  output once rather than repeatedly concatenating accumulated results. A separate
+  failure state preserves `default(Invalid<TError>)` as invalid even with no errors.
+  It still enumerates once, continues after errors, rejects an uninitialized union,
+  and returns immutable snapshots. Internal span access avoids boxing an error
+  array for each invalid item while copying its errors.
+- `NonEmpty` has a private immutable-storage constructor. `Map` allocates a tail
+  of the exact size through `ImmutableArray.CreateRange` without another copy.
+  Conversion bulk-copies array tails; other inputs are enumerated once, reserving
+  tail size when the input exposes a count without enumeration.
+  `Append` also avoids a redundant snapshot;
+  repeated append still has quadratic copying and is not a bulk-building API.
+- `Result.Map`, `MapError`, and `GetValueOrDefault` use direct pattern matching
+  instead of capturing delegates. This preserves branch behavior while removing
+  avoidable closures from synchronous pipelines and ReaderResult mapping.
+- Writer storage and Reader representations are unchanged. Local mutation stays
+  confined to collection construction; no mutable storage is shared with callers.
+
+### Measured outcome
+
+Same machine/runtime and ShortRun settings as the initial investigation:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| Validation.Sequence, 1024 failures | 2211.91 KiB | 8.33 KiB |
+| NonEmpty.Map, 1024 elements | 8.13 KiB | 4.05 KiB |
+| ReaderResult.Map, 32 prebuilt steps | 1560 B | 792 B |
+| Array conversion, 1024 elements (original strategy versus optimized) | 8.10 KiB | 4.08 KiB |
+
+These are managed allocations per operation, not time ratios. Generated reports
+are under `BenchmarkDotNet.Artifacts/optimized`, `optimized-final`, and
+`conversion-final`. Successful 1024-item validation batches used 8.27 KiB and
+alternating batches used 4.30 KiB. Builder-based batching has fixed overhead, so
+very small batches can allocate more than the original fold; the main gain is
+linear scaling rather than repeated copying.
+
+Measurement rejected two intermediate implementations: the manual NonEmpty map
+builder reduced allocations but slowed the measured transform, and enumerating
+arrays element-by-element was slower than the original two-copy conversion.
+The final implementation uses the standard immutable-array transform and a
+bulk-copy array conversion path instead. Timings remain exploratory because the
+ShortRun confidence intervals are wide; no tight latency claims are made here.
+
+All 248 tests and all 111 benchmark smoke cases pass. The new tests pin single-pass
+enumeration, snapshot isolation, mapper order, enumerator disposal, default-invalid
+behavior, and agreement with a Zip-based reference fold.
+
+To rerun the optimized workloads:
+
+```sh
+dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
+  --filter '*NonEmpty*1024*' '*ValidationSequenceBenchmarks*1024*' '*ReaderExecutionBenchmarks*32*' \
+  --job Short --artifacts BenchmarkDotNet.Artifacts/optimized
+```

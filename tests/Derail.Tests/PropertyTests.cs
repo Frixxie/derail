@@ -165,4 +165,22 @@ public class ValidationProperties
         Make(ok, value, errors).ToResult().Match(
             v => ok && v == value,
             e => !ok && e.SequenceEqual(errors.Get));
+
+    [Property]
+    public bool Sequence_MatchesZipFold_IncludingEmptyInvalidCases((bool invalid, int value, int[] errors)[] items)
+    {
+        var validations = items.Select(item => !item.invalid
+            ? Validation.Valid<int, int>(item.value)
+            : item.errors.Length == 0
+                ? (Validation<int, int>)default(Invalid<int>)
+                : Validation.Invalid<int, int>(item.errors[0], item.errors.AsSpan()[1..])).ToArray();
+        var expected = validations.Aggregate(
+            Validation.Valid<IReadOnlyList<int>, int>([]),
+            (acc, next) => acc.Zip(next, (values, value) => (IReadOnlyList<int>)[.. values, value]));
+        var actual = Validation.Sequence(validations);
+
+        return expected.Match(
+            values => actual.Match(other => values.SequenceEqual(other), _ => false),
+            errors => actual.Match(_ => false, other => errors.SequenceEqual(other)));
+    }
 }
