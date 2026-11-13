@@ -132,43 +132,58 @@ var welcome = ValidateApplication(owner, number, deposit)
 ### NonEmpty: require at least one item
 
 ```csharp
-var batch = NonEmpty.FromEnumerable(new[] { 1, 2, 3 })
-    .ToResult(() => "At least one item is required");
+sealed record Payment(AccountNumber To, decimal Amount);
 
-var total = batch.Map(items => items.Map(x => x * 2).Sum()); // Ok(12)
-var required = new NonEmpty<int>(1, 2, 3);
+Result<NonEmpty<Payment>, string> RequirePayments(IEnumerable<Payment> payments) =>
+    NonEmpty.FromEnumerable(payments).ToResult(() => "At least one payment is required");
+
+var batch = RequirePayments([
+    new Payment(Checking.Number, 200m),
+    new Payment(Seized.Number, 50m),
+]);
+
+var total = batch.Map(payments => payments.Map(payment => payment.Amount).Sum()); // Ok(250m)
+var empty = RequirePayments([]); // Error("At least one payment is required")
 ```
 
 `NonEmpty<T>` implements `IReadOnlyList<T>` with `Head`, `Tail`, and `Count`.
 Construction snapshots the input; `Map` and `Append` preserve order and non-emptiness.
 It is a sealed class: `default` is null, not a constructed empty collection.
 Ordinary LINQ operations such as `Where` still return ordinary sequences that may be empty.
+Non-emptiness alone does not validate payment amounts or destination accounts.
 
 ### Writer: return events instead of emitting them
 
 ```csharp
-var workflow =
-    from first in new Writer<int, string>(2, ["first"])
-    from second in new Writer<int, string>(3, ["second"])
-    select first + second;
+sealed record TransferRecorded(AccountNumber From, AccountNumber To, decimal Amount);
 
-var (value, events) = workflow; // 5, ["first", "second"]
+var result = Transfer("1234.56.78901", "1098.76.54321", 200m)
+    .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+        [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)]));
+
+// Ok: a receipt paired with one audit event. Error: no Writer is produced.
 ```
 
 Writer composition is eager, but events are only data: nothing is logged or published.
 `Map` preserves events; `Bind` and `Zip` append them left-to-right; `MapEvents` transforms them.
 `Writer.Pure<T, TEvent>(value)` starts without events, and `Writer.Tell(event)` records
 one event with a `ValueTuple` result. Event inputs are snapshotted, and callers own delivery policy.
+The banking workflow only calculates a transfer proposal: it does not persist balances or publish
+events. Production code must coordinate persistence and event delivery separately.
 
 ### Reader: compose computations with explicit dependencies
 
 ```csharp
-var reader =
-    from first in Reader.Ask<int>()
-    from second in new Reader<int, int>(env => env * 2)
-    select first + second;
+Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
+    Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
+        .Map(ledger => ledger.Values.Sum(account => account.Balance));
 
-var value = reader.Local<string>(text => text.Length).Run("test"); // 12
+var report = TotalBalance();
+var total = report.Run(Ledger); // 6050m
+var checkingOnly = report.Run(new Dictionary<AccountNumber, Account>
+{
+    [Checking.Number] = Checking,
+}); // 50m
 ```
 
 `Reader` defers work until `Run`, uses the same environment throughout `Bind` and `Zip`,
@@ -179,19 +194,28 @@ and neither purity nor thread safety is enforced.
 `ReaderResult<TEnv, T, TError>` combines this with Derail's short-circuiting `Result`:
 
 ```csharp
-var checkedReader = new ReaderResult<int, int, string>(quantity => quantity > 0
-    ? Result.Ok<int, string>(quantity)
-    : Result.Error<int, string>("Quantity must be positive"));
+ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError>
+    AuditedTransfer(string fromInput, string toInput, decimal amount) =>
+    new(ledger => Transfer(fromInput, toInput, amount, ledger)
+        .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+            [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
 
-var doubled = checkedReader.Map(quantity => quantity * 2).Run(3); // Ok(6)
+var workflow = AuditedTransfer("1234.56.78901", "1098.76.54321", 200m);
+var result = workflow.Run(Ledger); // Ok: receipt (800m, 250m) and its audit event
 ```
 
 It supports `Map`, `MapError`, `Bind`, `Recover`, `Zip`, `Local`, and LINQ.
 `Zip` never runs the right computation after a left error. `Recover` handles an error
 with another computation using the same environment. `ReaderResult.FromReader<TEnv, T, TError>`
 lifts an infallible reader, and `ToReader()` exposes the underlying result-valued reader.
-See [`PrimitiveExamples.cs`](tests/Derail.Tests/PrimitiveExamples.cs) for an example
-combining a fallible Reader with Writer events. Validation's existing error API is unchanged.
+The banking example overloads `Transfer` to accept the supplied ledger and threads it through
+account lookups. Running the same workflow with only 100m in savings returns `InsufficientFunds`
+instead of a Writer. See [`BankingExamples.cs`](tests/Derail.Tests/BankingExamples.cs) for the
+executable examples and [`PrimitiveExamples.cs`](tests/Derail.Tests/PrimitiveExamples.cs) for a pricing example.
+
+`Reader`, `Writer`, and `NonEmpty` are sealed classes, not unions: they wrap a computation,
+pair a value with events, and require a head element respectively. Their constructors and
+immutable collection storage protect these invariants; none needs alternative union cases.
 
 ### Async
 

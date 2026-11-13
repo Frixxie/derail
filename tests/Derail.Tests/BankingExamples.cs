@@ -6,7 +6,8 @@ namespace Derail.Tests;
 
 /// <summary>
 /// Executable examples using a small banking domain: looking up accounts (Option),
-/// transferring money (Result), opening accounts (Validation) and async pipelines.
+/// transferring money (Result), opening accounts (Validation), required payment batches
+/// (NonEmpty), explicit dependencies (Reader), audit events (Writer) and async pipelines.
 /// </summary>
 public class BankingExamples
 {
@@ -39,7 +40,10 @@ public class BankingExamples
     // --- Building blocks -------------------------------------------------------------
 
     private static Option<Account> FindAccount(AccountNumber number) =>
-        Ledger.TryGetValue(number, out var account) ? Option.Some(account) : Option.None;
+        FindAccount(number, Ledger);
+
+    private static Option<Account> FindAccount(AccountNumber number, IReadOnlyDictionary<AccountNumber, Account> ledger) =>
+        ledger.TryGetValue(number, out var account) ? Option.Some(account) : Option.None;
 
     private static Result<AccountNumber, TransferError> ParseAccountNumber(string input)
     {
@@ -75,15 +79,24 @@ public class BankingExamples
     private static Account Deposit(Account account, decimal amount) => account with { Balance = account.Balance + amount };
 
     private static Result<Account, TransferError> OpenAccount(string input) =>
-        ParseAccountNumber(input).Bind(GetAccount).Bind(EnsureActive);
+        OpenAccount(input, Ledger);
+
+    private static Result<Account, TransferError> OpenAccount(string input, IReadOnlyDictionary<AccountNumber, Account> ledger) =>
+        ParseAccountNumber(input)
+            .Bind(number => FindAccount(number, ledger).ToResult(TransferError () => new TransferError.AccountNotFound(number)))
+            .Bind(EnsureActive);
 
     // --- The transfer pipeline -------------------------------------------------------
 
     /// <summary>Query syntax keeps every intermediate value in scope, which a transfer needs.</summary>
     private static Result<Receipt, TransferError> Transfer(string fromInput, string toInput, decimal amount) =>
+        Transfer(fromInput, toInput, amount, Ledger);
+
+    private static Result<Receipt, TransferError> Transfer(
+        string fromInput, string toInput, decimal amount, IReadOnlyDictionary<AccountNumber, Account> ledger) =>
         from value in EnsurePositive(amount)
-        from source in OpenAccount(fromInput)
-        from target in OpenAccount(toInput)
+        from source in OpenAccount(fromInput, ledger)
+        from target in OpenAccount(toInput, ledger)
         from _ in EnsureDifferent(source, target)
         from debited in Withdraw(source, value)
         let credited = Deposit(target, value)
@@ -259,6 +272,76 @@ public class BankingExamples
             .Match(ok => ok, errors => string.Join("; ", errors));
 
         message.Should().Be("Owner is required; '12' is not an account number");
+    }
+
+    // --- NonEmpty, Reader and Writer --------------------------------------------------
+
+    private sealed record Payment(AccountNumber To, decimal Amount);
+    private sealed record TransferRecorded(AccountNumber From, AccountNumber To, decimal Amount);
+
+    private static Result<NonEmpty<Payment>, string> RequirePayments(IEnumerable<Payment> payments) =>
+        NonEmpty.FromEnumerable(payments).ToResult(() => "At least one payment is required");
+
+    private static Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
+        Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
+            .Map(ledger => ledger.Values.Sum(account => account.Balance));
+
+    private static ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError>
+        AuditedTransfer(string fromInput, string toInput, decimal amount) =>
+        new(ledger => Transfer(fromInput, toInput, amount, ledger)
+            .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+                [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
+
+    [Fact]
+    public void NonEmpty_PaymentBatchRequiresAtLeastOnePayment()
+    {
+        var batch = RequirePayments([
+            new Payment(Checking.Number, 200m),
+            new Payment(Seized.Number, 50m),
+        ]);
+
+        batch.Map(payments => payments.Map(payment => payment.Amount).Sum())
+            .Should().Be(Result.Ok<decimal, string>(250m));
+        RequirePayments([]).Should().Be(
+            Result.Error<NonEmpty<Payment>, string>("At least one payment is required"));
+    }
+
+    [Fact]
+    public void Reader_BalanceReportUsesTheSuppliedLedger()
+    {
+        var report = TotalBalance();
+
+        report.Run(Ledger).Should().Be(6_050m);
+        report.Run(new Dictionary<AccountNumber, Account> { [Checking.Number] = Checking })
+            .Should().Be(50m);
+    }
+
+    [Fact]
+    public void Writer_SuccessfulTransferReturnsAnAuditEvent()
+    {
+        var result = AuditedTransfer("1234.56.78901", "1098.76.54321", 200m).Run(Ledger);
+        var audited = result.Match(value => value, error => throw new InvalidOperationException(error.ToString()));
+        var expected = new Receipt(Savings.Number, Checking.Number, 200m, 800m, 250m);
+
+        audited.Value.Should().Be(expected);
+        audited.Events.Should().Equal(new TransferRecorded(expected.From, expected.To, expected.Amount));
+        // The workflow calculates a proposal; it neither updates the ledger nor publishes events.
+        Ledger[Savings.Number].Balance.Should().Be(1_000m);
+        Ledger[Checking.Number].Balance.Should().Be(50m);
+    }
+
+    [Fact]
+    public void ReaderResult_TransferUsesTheSuppliedBalancesAndReturnsNoWriterOnFailure()
+    {
+        var workflow = AuditedTransfer("1234.56.78901", "1098.76.54321", 200m);
+        var ledger = new Dictionary<AccountNumber, Account>(Ledger)
+        {
+            [Savings.Number] = Savings with { Balance = 100m },
+        };
+
+        workflow.Run(ledger).Should().Be(Result.Error<Writer<Receipt, TransferRecorded>, TransferError>(
+            new TransferError.InsufficientFunds(Savings.Number, 100m, 200m)));
+        workflow.Run(Ledger).IsOk.Should().BeTrue();
     }
 
     // --- Async -----------------------------------------------------------------------
