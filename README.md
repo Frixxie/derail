@@ -124,10 +124,34 @@ ValidateApplication("", "12", 10m);
 ```csharp
 var numbers = Validation.Sequence(batch.Select(ValidateNumber));
 
-var welcome = ValidateApplication(owner, number, deposit)
-    .ToResult()
-    .Map(a => $"Welcome, {a.Owner}");
+Result<AccountApplication, NonEmpty<string>> application =
+    ValidateApplication("", "12", 500m).ToResult();
+
+var message = application
+    .Map(a => $"Welcome, {a.Owner}")
+    .Match(ok => ok, errors => string.Join("; ", errors));
+// "Owner is required; '12' is not an account number"
 ```
+
+Failures always have a first error, so an error summary needs no empty-list fallback:
+
+```csharp
+var summary = ValidateApplication("", "12", 10m).Match(
+    _ => "Application accepted",
+    errors => $"{errors.Head} ({errors.Tail.Count} more problems)");
+// "Owner is required (2 more problems)"
+```
+
+`Invalid<TError>` is a sealed class whose `Errors` is a `NonEmpty<TError>`: every
+constructed failure contains at least one error. `Match` receives that non-empty
+collection, and `ToResult()` returns `Result<T, NonEmpty<TError>>`. Mapping and
+combining failures preserve non-emptiness and error order.
+
+**Breaking API change:** `Invalid<TError>` was previously a struct with an
+`IReadOnlyList<TError>` payload. Its `Errors`, deconstruction, and `Match` now expose
+`NonEmpty<TError>`; update explicitly typed `ToResult()` consumers accordingly.
+`default(Invalid<TError>)` is now null, not an empty failure. Create failures with
+`Validation.Invalid<T, TError>(firstError, ...)` or `new Invalid<TError>(firstError, ...)`.
 
 ### NonEmpty: require at least one item
 
@@ -283,7 +307,12 @@ benchmarks/Derail.Benchmarks BenchmarkDotNet benchmarks
 
 ## Releasing
 
-Push a tag like `v0.2.0`. The [release workflow](.github/workflows/release.yml) builds, tests, packs with that version, publishes to nuget.org through trusted publishing, and creates a GitHub release.
+See [the changelog](https://github.com/Frixxie/derail/blob/main/CHANGELOG.md) for release notes and migration details.
+
+Update the package version in `src/Derail/Derail.csproj`, then push the matching tag
+(for example, `v0.3.0`). The [release workflow](.github/workflows/release.yml) builds,
+tests, packs with that version, publishes to nuget.org through trusted publishing,
+and creates a GitHub release.
 
 ## License
 

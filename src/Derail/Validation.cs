@@ -6,38 +6,35 @@ namespace Derail;
 public readonly record struct Valid<T>(T Value);
 
 /// <summary>One or more validation errors, in the order they were found.</summary>
-public readonly struct Invalid<TError> : IEquatable<Invalid<TError>>
+public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
 {
-    private readonly ImmutableArray<TError> _errors;
-
     /// <summary>Creates an invalid case with at least one error.</summary>
     public Invalid(TError error, params ReadOnlySpan<TError> more) =>
-        _errors = [error, .. more];
+        Errors = new(error, more);
 
-    internal Invalid(ImmutableArray<TError> errors) => _errors = errors;
+    private Invalid(NonEmpty<TError> errors) => Errors = errors;
 
-    /// <summary>The errors. Empty only for <c>default</c>.</summary>
-    public IReadOnlyList<TError> Errors => _errors.IsDefault ? [] : _errors;
+    /// <summary>The errors, always containing at least one element.</summary>
+    public NonEmpty<TError> Errors { get; }
 
-    internal ReadOnlySpan<TError> ErrorSpan => _errors.AsSpan();
+    public void Deconstruct(out NonEmpty<TError> errors) => errors = Errors;
 
-    public void Deconstruct(out IReadOnlyList<TError> errors) => errors = Errors;
-
-    internal Invalid<TError> Concat(Invalid<TError> other) => new([.. Errors, .. other.Errors]);
+    internal Invalid<TError> Concat(Invalid<TError> other) => new(Errors.Append(other.Errors));
 
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
-        new([.. Errors.Select(map)]);
+        new(Errors.Map(map));
 
-    public bool Equals(Invalid<TError> other) => Errors.SequenceEqual(other.Errors);
+    public bool Equals(Invalid<TError>? other) => other is not null && Errors.SequenceEqual(other.Errors);
 
     public override bool Equals(object? obj) => obj is Invalid<TError> other && Equals(other);
 
     public override int GetHashCode() =>
         Errors.Aggregate(new HashCode(), (hash, error) => { hash.Add(error); return hash; }).ToHashCode();
 
-    public static bool operator ==(Invalid<TError> left, Invalid<TError> right) => left.Equals(right);
+    public static bool operator ==(Invalid<TError>? left, Invalid<TError>? right) =>
+        ReferenceEquals(left, right) || left is not null && left.Equals(right);
 
-    public static bool operator !=(Invalid<TError> left, Invalid<TError> right) => !left.Equals(right);
+    public static bool operator !=(Invalid<TError>? left, Invalid<TError>? right) => !(left == right);
 }
 
 /// <summary>
@@ -71,18 +68,19 @@ public static class Validation
                     if (errors is null) values.Add(valid.Value);
                     break;
                 case Invalid<TError> invalid:
-                    // Presence of the builder records failure even for default(Invalid<TError>).
                     errors ??= ImmutableArray.CreateBuilder<TError>();
-                    errors.AddRange(invalid.ErrorSpan);
+                    errors.AddRange(invalid.Errors);
                     break;
                 default:
                     throw new System.Runtime.CompilerServices.SwitchExpressionException(validation);
             }
         }
 
-        return errors is null
-            ? new Valid<IReadOnlyList<T>>(values.DrainToImmutable())
-            : new Invalid<TError>(errors.DrainToImmutable());
+        if (errors is null) return new Valid<IReadOnlyList<T>>(values.DrainToImmutable());
+
+        // Every Invalid contributes at least one error, so the first element always exists.
+        var allErrors = errors.DrainToImmutable();
+        return new Invalid<TError>(allErrors[0], allErrors.AsSpan()[1..]);
     }
 }
 
@@ -98,7 +96,7 @@ public static class ValidationExtensions
         public bool IsInvalid => validation is Invalid<TError>;
 
         /// <summary>Folds the validation into a single value.</summary>
-        public TResult Match<TResult>(Func<T, TResult> valid, Func<IReadOnlyList<TError>, TResult> invalid) =>
+        public TResult Match<TResult>(Func<T, TResult> valid, Func<NonEmpty<TError>, TResult> invalid) =>
             validation switch
             {
                 Valid<T> v => valid(v.Value),
@@ -145,9 +143,9 @@ public static class ValidationExtensions
         /// <summary>Returns the value, or <paramref name="fallback"/> when invalid.</summary>
         public T GetValueOrDefault(T fallback) => validation.Match(v => v, _ => fallback);
 
-        /// <summary>Converts to a result whose error is the list of all errors.</summary>
-        public Result<T, IReadOnlyList<TError>> ToResult() =>
-            validation.Match(Result.Ok<T, IReadOnlyList<TError>>, Result.Error<T, IReadOnlyList<TError>>);
+        /// <summary>Converts to a result whose error is the non-empty collection of all errors.</summary>
+        public Result<T, NonEmpty<TError>> ToResult() =>
+            validation.Match(Result.Ok<T, NonEmpty<TError>>, Result.Error<T, NonEmpty<TError>>);
     }
 
     extension<T, TResult, TError>(Validation<Func<T, TResult>, TError> function)

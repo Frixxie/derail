@@ -38,8 +38,27 @@ public class ValidationTests
         }
 
         [Fact]
-        public void DefaultInvalid_HasNoErrors() =>
-            default(Invalid<string>).Errors.Should().BeEmpty();
+        public void DefaultInvalid_IsNullRatherThanAnEmptyFailure() =>
+            ((object?)default(Invalid<string>)).Should().BeNull();
+
+        [Fact]
+        public void Invalid_ExposesNonEmptyErrors()
+        {
+            NonEmpty<string> errors = new Invalid<string>("first", "second").Errors;
+
+            errors.Head.Should().Be("first");
+            errors.Tail.Should().Equal("second");
+        }
+
+        [Fact]
+        public void Invalid_SnapshotsTheErrorTail()
+        {
+            var tail = new[] { "second" };
+            var invalid = new Invalid<string>("first", tail);
+            tail[0] = "changed";
+
+            invalid.Errors.Should().Equal("first", "second");
+        }
     }
 
     public class Equality
@@ -59,6 +78,20 @@ public class ValidationTests
         [Fact]
         public void EqualInvalids_HaveEqualHashCodes() =>
             new Invalid<string>("a", "b").GetHashCode().Should().Be(new Invalid<string>("a", "b").GetHashCode());
+
+        [Fact]
+        public void Operators_HandleNullAndStructuralEquality()
+        {
+            Invalid<string>? absent = null;
+            var invalid = new Invalid<string>("a", "b");
+
+            (invalid == new Invalid<string>("a", "b")).Should().BeTrue();
+            (invalid != new Invalid<string>("b", "a")).Should().BeTrue();
+            (absent == null).Should().BeTrue();
+            (invalid == absent).Should().BeFalse();
+            (absent == invalid).Should().BeFalse();
+            invalid.Equals(absent).Should().BeFalse();
+        }
     }
 
     public class Match
@@ -179,13 +212,13 @@ public class ValidationTests
                 .Should().Be("'x' is not a number,'y' is not a number");
 
         [Fact]
-        public void DefaultInvalid_RemainsInvalidEvenWithoutErrors()
+        public void SingleInvalid_PreservesItsRequiredFirstError()
         {
-            Validation<int, string> invalid = default(Invalid<string>);
+            Validation<int, string> invalid = new Invalid<string>("required");
             var result = Validation.Sequence([Parse("1"), invalid, Parse("2")]);
 
             result.IsInvalid.Should().BeTrue();
-            result.Match(_ => ["unexpected success"], errors => errors).Should().BeEmpty();
+            result.Match(_ => "unexpected success", errors => errors.Head).Should().Be("required");
         }
 
         [Fact]
@@ -207,7 +240,7 @@ public class ValidationTests
 
             var result = Validation.Sequence(Source());
 
-            result.Match(_ => [], errors => errors).Should().Equal("first", "second", "third");
+            result.Match(IReadOnlyList<string> (_) => [], errors => errors).Should().Equal("first", "second", "third");
             visited.Should().Equal(1, 2, 3);
             enumerations.Should().Be(1);
         }
@@ -243,6 +276,14 @@ public class ValidationTests
         public void InvalidBecomesErrorWithAllErrors() =>
             Validation.Invalid<int, string>("a", "b").ToResult().Match(_ => "", e => string.Join(",", e))
                 .Should().Be("a,b");
+
+        [Fact]
+        public void ToResult_PreservesNonEmptyErrorType()
+        {
+            Result<int, NonEmpty<string>> result = Failed.ToResult();
+
+            result.Match(_ => "unexpected success", errors => errors.Head).Should().Be("boom");
+        }
 
         [Fact]
         public void GetValueOrDefault_ReturnsFallback_WhenInvalid() =>

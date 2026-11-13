@@ -11,7 +11,7 @@
 
   <PropertyGroup Label="Packaging">
     <PackageId>Derail</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Fredrik Hagen Fasteraune</Authors>
     <PackageTags>result;option;maybe;either;validation;monad;railway;functional;union</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

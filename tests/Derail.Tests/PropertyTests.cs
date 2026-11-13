@@ -64,7 +64,7 @@ public class ValidationProperties
     private static Validation<Func<int, int>, string> MakeFn(bool ok, int k, NonEmptyArray<string> errors) =>
         Make<Func<int, int>>(ok, x => x + k, errors);
 
-    private static IReadOnlyList<string> Errors<T>(Validation<T, string> v) => v.Match(_ => [], e => e);
+    private static IReadOnlyList<string> Errors<T>(Validation<T, string> v) => v.Match(IReadOnlyList<string> (_) => [], e => e);
 
     [Property]
     public bool Map_Identity(bool ok, int value, NonEmptyArray<string> errors) =>
@@ -148,7 +148,7 @@ public class ValidationProperties
 
         return sequenced.Match(
             values => validations.All(v => v.IsValid) && values.SequenceEqual(items.Select(i => i.value)),
-            errors => validations.Any(v => v.IsInvalid) && errors.SequenceEqual(validations.SelectMany(Errors)));
+            errors => errors.Count > 0 && validations.Any(v => v.IsInvalid) && errors.SequenceEqual(validations.SelectMany(Errors)));
     }
 
     [Property]
@@ -161,19 +161,35 @@ public class ValidationProperties
             .Equals(Make(ok, value, errors).MapErrors(e => (e + "!").Length));
 
     [Property]
+    public bool Invalid_PreservesHeadAndTail(NonEmptyArray<int> errors)
+    {
+        var invalid = new Invalid<int>(errors.Get[0], errors.Get.AsSpan()[1..]);
+
+        return invalid.Errors.Head == errors.Get[0]
+            && invalid.Errors.Count == errors.Get.Length
+            && invalid.Errors.Tail.SequenceEqual(errors.Get.Skip(1));
+    }
+
+    [Property]
+    public bool MapErrors_PreservesNonEmptinessCountAndOrder(NonEmptyArray<int> errors) =>
+        Validation.Invalid<int, int>(errors.Get[0], errors.Get.AsSpan()[1..])
+            .MapErrors(error => error.ToString())
+            .Match(_ => false, mapped => mapped.Count > 0
+                && mapped.Count == errors.Get.Length
+                && mapped.SequenceEqual(errors.Get.Select(error => error.ToString())));
+
+    [Property]
     public bool ToResult_PreservesValueAndErrors(bool ok, int value, NonEmptyArray<string> errors) =>
         Make(ok, value, errors).ToResult().Match(
             v => ok && v == value,
-            e => !ok && e.SequenceEqual(errors.Get));
+            e => !ok && e.Count > 0 && e.SequenceEqual(errors.Get));
 
     [Property]
-    public bool Sequence_MatchesZipFold_IncludingEmptyInvalidCases((bool invalid, int value, int[] errors)[] items)
+    public bool Sequence_MatchesZipFold((bool invalid, int value, NonEmptyArray<int> errors)[] items)
     {
         var validations = items.Select(item => !item.invalid
             ? Validation.Valid<int, int>(item.value)
-            : item.errors.Length == 0
-                ? (Validation<int, int>)default(Invalid<int>)
-                : Validation.Invalid<int, int>(item.errors[0], item.errors.AsSpan()[1..])).ToArray();
+            : Validation.Invalid<int, int>(item.errors.Get[0], item.errors.Get.AsSpan()[1..])).ToArray();
         var expected = validations.Aggregate(
             Validation.Valid<IReadOnlyList<int>, int>([]),
             (acc, next) => acc.Zip(next, (values, value) => (IReadOnlyList<int>)[.. values, value]));

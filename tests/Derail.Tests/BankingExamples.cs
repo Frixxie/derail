@@ -266,12 +266,27 @@ public class BankingExamples
     [Fact]
     public void Validation_ThenContinueAsResult()
     {
-        var message = ValidateApplication("", "12", 500m)
-            .ToResult()
+        Result<AccountApplication, NonEmpty<string>> application = ValidateApplication("", "12", 500m).ToResult();
+
+        var message = application
             .Map(a => $"Welcome, {a.Owner}")
             .Match(ok => ok, errors => string.Join("; ", errors));
 
         message.Should().Be("Owner is required; '12' is not an account number");
+    }
+
+    [Fact]
+    public void Validation_RejectedApplicationHasARequiredFirstError()
+    {
+        var rejection = ValidateApplication("", "12", 10m);
+
+        var summary = rejection.Match(
+            _ => "Application accepted",
+            errors => $"{errors.Head} ({errors.Tail.Count} more problems)");
+
+        summary.Should().Be("Owner is required (2 more problems)");
+        (rejection is Invalid<string>(var errors) && errors.Head == "Owner is required"
+            && errors.Count == 3).Should().BeTrue();
     }
 
     // --- NonEmpty, Reader and Writer --------------------------------------------------

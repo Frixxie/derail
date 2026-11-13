@@ -125,12 +125,13 @@ control. No library implementations were changed in the initial benchmark revisi
 
 ## Optimization approach
 
-- `Validation.Sequence` uses method-local immutable-array builders, freezing the
-  output once rather than repeatedly concatenating accumulated results. A separate
-  failure state preserves `default(Invalid<TError>)` as invalid even with no errors.
-  It still enumerates once, continues after errors, rejects an uninitialized union,
-  and returns immutable snapshots. Internal span access avoids boxing an error
-  array for each invalid item while copying its errors.
+- `Validation.Sequence` uses method-local immutable-array builders rather than
+  repeatedly concatenating accumulated results. It enumerates once, continues after
+  errors, rejects an uninitialized union, and returns immutable snapshots.
+  `Invalid<TError>` now stores `NonEmpty<TError>` and is a sealed class: a constructed
+  failure cannot have zero errors. Sequence collects these errors into a builder,
+  then snapshots the required head and tail. The measurements below predate this
+  representation change and should be rerun before drawing allocation conclusions.
 - `NonEmpty` has a private immutable-storage constructor. `Map` allocates a tail
   of the exact size through `ImmutableArray.CreateRange` without another copy.
   Conversion bulk-copies array tails; other inputs are enumerated once, reserving
