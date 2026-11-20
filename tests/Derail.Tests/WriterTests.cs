@@ -76,6 +76,42 @@ public class WriterTests
         return left.Value == right.Value && left.Events.SequenceEqual(right.Events);
     }
 
+    [Fact]
+    public void Bind_LongLeftNestedChain_KeepsEventOrder()
+    {
+        const int count = 100_000;
+        var writer = Writer.Pure<int, int>(0);
+        for (var i = 0; i < count; i++) writer = writer.Bind(static x => new Writer<int, int>(x + 1, [x]));
+
+        writer.Value.Should().Be(count);
+        writer.Events.Should().Equal(Enumerable.Range(0, count));
+    }
+
+    [Fact]
+    public void Bind_LongRightNestedChain_KeepsEventOrder()
+    {
+        const int count = 100_000;
+        var writer = new Writer<int, int>(count, [count - 1]);
+        for (var i = count - 2; i >= 0; i--)
+        {
+            var rest = writer;
+            writer = new Writer<int, int>(i, [i]).Bind(_ => rest);
+        }
+
+        writer.Events.Should().Equal(Enumerable.Range(0, count));
+    }
+
+    [Property]
+    public bool Bind_Chain_EventsAreConcatenationOfSegments(int[][] segments)
+    {
+        var writer = segments.Aggregate(
+            Writer.Pure<int, int>(0),
+            (acc, segment) => acc.Bind(x => new Writer<int, int>(x + 1, segment)));
+        return writer.Value == segments.Length
+            && writer.Events.SequenceEqual(segments.SelectMany(s => s))
+            && writer.Events.SequenceEqual(writer.Events);
+    }
+
     [Property]
     public bool Zip_CombinesValuesAndOrderedEvents(int left, int right, int[] first, int[] second)
     {

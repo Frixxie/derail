@@ -6,19 +6,27 @@ namespace Derail;
 /// <remarks>Composition is eager. Callers decide how and when to deliver the collected events.</remarks>
 public sealed class Writer<T, TEvent>
 {
-    private readonly ImmutableArray<TEvent> _events;
+    // Bind joins event trees in constant time; Events flattens once and caches the result.
+    // The cache write is a single reference assignment, so concurrent readers at worst flatten twice.
+    private EventTree<TEvent> _events;
 
     /// <summary>Pairs a value with a snapshot of its events in encounter order.</summary>
     public Writer(T value, IEnumerable<TEvent> events)
     {
         ArgumentNullException.ThrowIfNull(events);
         Value = value;
-        _events = events.ToImmutableArray();
+        _events = new Leaf<TEvent>(events.ToImmutableArray());
+    }
+
+    private Writer(T value, EventTree<TEvent> events)
+    {
+        Value = value;
+        _events = events;
     }
 
     public T Value { get; }
 
-    public IReadOnlyList<TEvent> Events => _events;
+    public IReadOnlyList<TEvent> Events => Flatten();
 
     public void Deconstruct(out T value, out IReadOnlyList<TEvent> events) =>
         (value, events) = (Value, Events);
@@ -28,13 +36,45 @@ public sealed class Writer<T, TEvent>
 
     /// <summary>Transforms each event while preserving the value and event order.</summary>
     public Writer<T, TNewEvent> MapEvents<TNewEvent>(Func<TEvent, TNewEvent> map) =>
-        new(Value, _events.Select(map));
+        new(Value, new Leaf<TNewEvent>(ImmutableArray.CreateRange(Flatten(), map)));
 
     /// <summary>Chains a computation, appending its events after this computation's events.</summary>
     public Writer<TResult, TEvent> Bind<TResult>(Func<T, Writer<TResult, TEvent>> bind)
     {
         var next = bind(Value);
-        return new(next.Value, _events.AddRange(next._events));
+        var events = (_events.Count, next._events.Count) switch
+        {
+            (0, _) => next._events,
+            (_, 0) => _events,
+            _ => new Concat<TEvent>(_events, next._events),
+        };
+        return new(next.Value, events);
+    }
+
+    private ImmutableArray<TEvent> Flatten()
+    {
+        if (_events is Leaf<TEvent> leaf) return leaf.Events;
+
+        var builder = ImmutableArray.CreateBuilder<TEvent>(_events.Count);
+        var pending = new Stack<EventTree<TEvent>>();
+        pending.Push(_events);
+        while (pending.TryPop(out var tree))
+        {
+            switch (tree)
+            {
+                case Leaf<TEvent> l:
+                    builder.AddRange(l.Events);
+                    break;
+                case Concat<TEvent> c:
+                    pending.Push(c.Right);
+                    pending.Push(c.Left);
+                    break;
+            }
+        }
+
+        var flattened = builder.MoveToImmutable();
+        _events = new Leaf<TEvent>(flattened);
+        return flattened;
     }
 
     /// <summary>Combines values and appends events left-to-right.</summary>
@@ -49,6 +89,13 @@ public sealed class Writer<T, TEvent>
         Func<T, Writer<TNext, TEvent>> bind, Func<T, TNext, TResult> project) =>
         Bind(value => bind(value).Map(next => project(value, next)));
 }
+
+internal abstract record EventTree<TEvent>(int Count);
+
+internal sealed record Leaf<TEvent>(ImmutableArray<TEvent> Events) : EventTree<TEvent>(Events.Length);
+
+internal sealed record Concat<TEvent>(EventTree<TEvent> Left, EventTree<TEvent> Right)
+    : EventTree<TEvent>(Left.Count + Right.Count);
 
 /// <summary>Factory methods for values with deferred events.</summary>
 public static class Writer

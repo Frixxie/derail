@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- `Writer.Bind` (and `Zip`/LINQ `from` clauses) now appends events in constant time
+  and flattens them once when `Events` is first read. Chaining 1,024 binds went from
+  95 µs / 2.3 MB to 20 µs / 221 KB. Event order and the public API are unchanged.
+
 ## 0.3.0
 
 ### Breaking changes
