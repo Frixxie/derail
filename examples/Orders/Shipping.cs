@@ -4,12 +4,10 @@ namespace Orders;
 
 internal sealed record ShipmentRequest(string? Carrier, string? Tracking);
 internal sealed record Shipment(string Carrier, string Tracking);
-internal sealed record Order(long Id, Shipment? Shipment);
 internal sealed record FieldError(string Field, string Code);
-internal readonly record struct OrderNotFound(long Id);
+internal readonly record struct OrderNotFound;
 internal readonly record struct AlreadyShipped;
 internal union ShipError(OrderNotFound, AlreadyShipped);
-internal sealed record OrderShipped(Shipment Shipment);
 
 internal static class Shipping
 {
@@ -24,13 +22,4 @@ internal static class Shipping
         var text when text.Contains('\0') => Validation.Invalid<string, FieldError>(new(name, "invalid-character")),
         var text => Validation.Valid<string, FieldError>(text),
     };
-
-    // The dependency here is the locked order snapshot, not a connection. A replay proposes no events.
-    public static ReaderResult<Option<Order>, Writer<Shipment, OrderShipped>, ShipError> Decide(long id, Shipment requested) =>
-        new(snapshot => snapshot.ToResult(ShipError () => new OrderNotFound(id)).Bind(order => order.Shipment switch
-        {
-            null => Result.Ok<Writer<Shipment, OrderShipped>, ShipError>(new(requested, [new(requested)])),
-            var existing when existing == requested => Result.Ok<Writer<Shipment, OrderShipped>, ShipError>(Writer.Pure<Shipment, OrderShipped>(existing)),
-            _ => Result.Error<Writer<Shipment, OrderShipped>, ShipError>(new AlreadyShipped()),
-        }));
 }

@@ -10,18 +10,7 @@ builder.Services.AddProblemDetails();
 var app = builder.Build();
 app.UseExceptionHandler();
 app.MapPut("/orders/{id:long}/shipment", Ship);
-app.MapGet("/orders/status", Lookup);
 app.Run();
-
-static async Task<IResult> Lookup(long[] id, NpgsqlDataSource db, CancellationToken token)
-{
-    if (NonEmpty.FromEnumerable(id) is not Some<NonEmpty<long>>(var ids))
-        return Results.ValidationProblem(new Dictionary<string, string[]> { ["id"] = ["required"] });
-
-    var result = await OrderStore.Lookup(ids).Run(db, token);
-    return result.Match(orders => Results.Ok(orders), missing => Results.Problem(statusCode: 404,
-        extensions: new Dictionary<string, object?> { ["code"] = "order-not-found", ["orderId"] = missing.Id }));
-}
 
 static async Task<IResult> Ship(long id, ShipmentRequest request, NpgsqlDataSource db, CancellationToken token)
 {
@@ -31,7 +20,7 @@ static async Task<IResult> Ship(long id, ShipmentRequest request, NpgsqlDataSour
             return Results.ValidationProblem(errors.GroupBy(e => e.Field)
                 .ToDictionary(g => g.Key, g => g.Select(e => e.Code).ToArray()));
         case Valid<Shipment>(var shipment):
-            var result = await OrderStore.Ship(id, shipment).Run(db, token);
+            var result = await OrderStore.Ship(db, id, shipment, token);
             return result.Match(value => Results.Ok(value), error => error switch
             {
                 OrderNotFound => Problem(404, "order-not-found"),

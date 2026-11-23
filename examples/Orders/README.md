@@ -1,81 +1,30 @@
-# Register an order shipment
+# Register a shipment
 
-`PUT /orders/{id}/shipment` records a shipment for an existing order. The order update
-and its `order-shipped` event must commit together. This local example uses ASP.NET
-Core, Npgsql, and [DbReader](https://github.com/seesharper/DbReader) for parameterized
-SQL and row mapping. These dependencies belong to the example, not the Derail package.
+`PUT /orders/1/shipment` takes a carrier and tracking number. Send the same shipment twice and you get the same `200 OK`, with only one shipment event recorded.
 
-## Run the integration tests
+Start with [the handler](Program.cs). There are three steps:
 
-From the repository root, with the .NET 11 SDK and a running Docker engine:
+1. **Validate both fields.** [`Validation.Zip`](Shipping.cs) combines the carrier and tracking checks. If both are blank, the caller gets both errors in one `400` response.
+2. **Save the shipment.** [`OrderStore.Ship`](OrderStore.cs) uses [DbReader](https://github.com/seesharper/DbReader) to read the order and write the shipment and event in one PostgreSQL transaction.
+3. **Return the result.** `Result.Match` maps the shipment to `200`, a missing order to `404`, or a different shipment already on the order to `409`.
 
-```sh
-dotnet test --project examples/Orders.Tests
-```
+## Try it
 
-[`ShipmentTests`](../Orders.Tests/ShipmentTests.cs) starts a throwaway PostgreSQL
-container with Testcontainers, applies [`schema.sql`](schema.sql), and hosts the
-API in-process with `WebApplicationFactory`. The tests use separate synthetic order IDs
-and check both HTTP responses and stored rows. The concurrency test locks an order
-until both requests are waiting: identical shipments both succeed, different shipments
-produce one conflict, and only one event is stored. To prove rollback, one test makes
-the event insert fail **after** the order update, expects HTTP 500, and verifies that
-the order is still unshipped. The container is removed afterwards.
-
-## Try a request
-
-Start a local database with the schema on `127.0.0.1:55432` (set `ORDERS_DB_PORT`
-to use another port), add an order, and point the app at it:
+From the repository root, with Docker running and the .NET 11 SDK installed:
 
 ```sh
 docker compose -f examples/Orders/compose.yaml up --detach --wait
-docker compose -f examples/Orders/compose.yaml exec postgres psql -c 'INSERT INTO orders (id) VALUES (1)'
+docker compose -f examples/Orders/compose.yaml exec postgres psql -c 'INSERT INTO orders (id) VALUES (1) ON CONFLICT DO NOTHING'
 ConnectionStrings__Orders='Host=127.0.0.1;Port=55432;Username=sample;Database=orders' \
   dotnet run --project examples/Orders --urls http://127.0.0.1:5080
 ```
 
+In another terminal:
+
 ```sh
-curl -i -X PUT http://127.0.0.1:5080/orders/1/shipment \
+curl -X PUT http://127.0.0.1:5080/orders/1/shipment \
   -H 'Content-Type: application/json' -d '{"carrier":"Parcel","tracking":"SYN-001"}'
 ```
 
-Remove the database with `docker compose -f examples/Orders/compose.yaml down --volumes`.
-
-| Outcome | HTTP contract |
-| --- | --- |
-| Shipment recorded, or same shipment replayed | `200` with the normalized `{carrier, tracking}`; one event in total |
-| Missing/blank, over-length, or NUL-containing fields | `400` validation problem; `errors` maps field names to `required`, `too-long`, or `invalid-character` |
-| Order does not exist | `404` problem with `code: order-not-found` |
-| A different shipment already exists | `409` problem with `code: already-shipped` |
-| Database command fails | Generic `500` problem; transaction rolls back |
-
-## Look up shipment status
-
-`GET /orders/status?id=1&id=2` looks up several orders in one query. For example,
-after registering the shipment above, run `curl 'http://127.0.0.1:5080/orders/status?id=1'`:
-
-```json
-[{"id":1,"shipment":{"carrier":"Parcel","tracking":"SYN-001"}}]
-```
-
-An existing order awaiting shipment has `"shipment": null`. `NonEmpty.FromEnumerable`
-rejects an empty ID list before querying (`400`, `errors.id: ["required"]`). DbReader
-binds the distinct IDs to `IN (@Ids)`. `Result.Traverse` then walks the **requested**
-IDs, preserving order and repeats. If any order is missing, the endpoint returns a
-`404` problem with `code: order-not-found` and the first missing `orderId` instead of
-a partial list.
-
-## Follow the workflow
-
-1. [`Shipping.Validate`](Shipping.cs) trims the two fields and uses `Validation.Zip`
-   to return every field error before opening a database connection.
-2. [`OrderStore.Ship`](OrderStore.cs) builds an `AsyncReaderResult` that takes an
-   `NpgsqlDataSource` at `Run`. It opens a transaction and reads the order with
-   `FOR UPDATE`, so competing shipment requests decide from a locked row.
-3. [`Shipping.Decide`](Shipping.cs) is a synchronous `ReaderResult` over that
-   snapshot. `Option<Order>` distinguishes a missing row from an unshipped order;
-   `Result.Bind` applies the shipment rule only when the row exists. A `Writer`
-   returns the shipment with one event on first registration and none on replay.
-4. The store applies each proposed event and commits. An exception leaves the
-   transaction uncommitted; it is not converted into `OrderNotFound` or `AlreadyShipped`.
-   [`Program.cs`](Program.cs) maps those two typed failures to their HTTP responses.
+To clean up, run `docker compose -f examples/Orders/compose.yaml down --volumes`.
+To run the [integration tests](../Orders.Tests/ShipmentTests.cs), use `dotnet test --project examples/Orders.Tests`; they start their own database.
