@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Frixxie/derail/actions/workflows/ci.yml/badge.svg)](https://github.com/Frixxie/derail/actions/workflows/ci.yml)
 
-Railway-oriented programming for C#, built on the native `union` types in C# 15 / .NET 11.
+Derail is a lightweight library of functional programming primitives for C# 15 on .NET 11. Use it when callers need to know why a domain operation failed, or when several independent checks should report their errors together. You can adopt a single type in an existing C# application.
 
 - **`Option<T>`** — a value that may be absent: `Some<T>` or `None`.
 - **`Result<T, TError>`** — an operation that may fail: `Ok<T>` or `Error<TError>`. Stops at the first error.
@@ -12,11 +12,11 @@ Railway-oriented programming for C#, built on the native `union` types in C# 15 
 - **`Reader<TEnv, T>` / `ReaderResult<TEnv, T, TError>`** — reusable computations with explicit dependencies.
 - **`AsyncReaderResult<TEnv, T, TError>`** — a reusable async workflow that receives its dependencies and cancellation token at execution.
 
-Option, Result, and Validation use real union members, giving you exhaustive `switch` expressions and implicit conversions from each case for free.
+`Result` and `Validation` are native C# unions. `Option` also supports union pattern matching and treats its default value as `None`.
 
 ## Requirements
 
-.NET SDK 11 (see `global.json`).
+The NuGet package targets `net11.0`. To build the repository, use the .NET 11 SDK specified in `global.json`.
 
 ## Installation
 
@@ -67,7 +67,14 @@ static Result<int, string> ParseQuantity(string input) =>
 
 ## Intended use
 
-Use `Result` for a sequence of dependent steps that should stop at the first expected failure. Use `Validation` when checks are independent and the caller needs every error.
+For a rule handled in one place, an `if`, a `switch`, or `TryParse` with an early return is usually clearer. Derail earns its place when several operations compose or an outcome crosses a method boundary:
+
+- **Dependent steps (monadic composition):** `Result.Bind` passes a successful value to the next step. A withdrawal needs an account, so a failed account lookup skips the balance check and preserves the lookup error.
+- **Independent checks (applicative composition):** `Validation.Zip` combines checks whose inputs are already available. A missing carrier and a missing tracking number can both be reported in one response. `Validation` deliberately has no `Bind`: there is no successful value to pass to a dependent check after a failure.
+
+Use typed errors for expected outcomes a caller can act on, such as insufficient funds. Keep exceptions for programming mistakes and unexpected infrastructure failures: a database timeout is different from an account that was not found. Async cancellation propagates as cancellation.
+
+Derail supplies values and functions for composing them. Your application still owns dependency injection, transactions, and event delivery: a `Reader` receives the environment you pass to `Run`, and a `Writer` collects events until you decide what to do with them.
 
 For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind((Account a) => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
 
