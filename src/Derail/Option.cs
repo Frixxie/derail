@@ -10,27 +10,13 @@ public readonly record struct Some<T>(T Value);
 public readonly record struct None;
 
 /// <summary>An optional value: either <see cref="Some{T}"/> or <see cref="None"/>.</summary>
-/// <remarks>The default value is <see cref="None"/>.</remarks>
-[System.Runtime.CompilerServices.Union]
-public readonly struct Option<T>
-{
-    // Null storage denotes None; even Some(null) is stored as a boxed Some<T>.
-    private readonly object? _some;
-
-    /// <summary>Constructs a present option, even when the case contains a null payload.</summary>
-    public Option(Some<T> value) => _some = value;
-    /// <summary>Constructs an absent option, equivalent to the default option.</summary>
-    public Option(None value) => _some = null;
-
-    /// <summary>Gets the active <see cref="Some{T}"/> or <see cref="None"/> case for union pattern matching.</summary>
-    public object Value => _some ?? Option.BoxedNone;
-}
+/// <remarks>The default value matches neither case. Both case predicates return false;
+/// combinators that inspect an uninitialized case throw <see cref="System.Runtime.CompilerServices.SwitchExpressionException"/>.</remarks>
+public union Option<T>(Some<T>, None);
 
 /// <summary>Factory methods for <see cref="Option{T}"/>.</summary>
 public static class Option
 {
-    internal static readonly object BoxedNone = new None();
-
     /// <summary>The absent value. Converts implicitly to any <see cref="Option{T}"/>.</summary>
     public static None None => default;
 
@@ -44,8 +30,12 @@ public static class Option
         var values = ImmutableArray.CreateBuilder<T>();
         foreach (var option in options)
         {
-            if (option is not Some<T>(var value)) return None;
-            values.Add(value);
+            switch (option)
+            {
+                case Some<T>(var value): values.Add(value); break;
+                case Derail.None: return None;
+                default: throw new System.Runtime.CompilerServices.SwitchExpressionException(option);
+            }
         }
         return Some<IReadOnlyList<T>>(values.DrainToImmutable());
     }

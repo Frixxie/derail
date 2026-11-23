@@ -3,9 +3,9 @@
 In this run, constructing an escaping `Some`, `Ok`, or `Error` allocated **24 B**
 with either an `int` or an existing `string` payload. Constructing `None` and reading
 a prebuilt case with `Match` or a pattern allocated **0 B**. This distinguishes
-the cost of creating a case from the cost of inspecting it. `Result` is a native
-C# union; `Option` is a union-compatible struct with explicit storage so that
-`default` represents `None`. These numbers describe these implementations, not all unions.
+the cost of creating a case from the cost of inspecting it. At the measured revision,
+`Result` was a native C# union and `Option` used explicit storage for `None`.
+The `Option` figures predate its return to native union notation.
 
 ## Reproduce
 

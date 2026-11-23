@@ -19,7 +19,8 @@ public class LazyFallbackTests
     public void None_invokes_the_fallback_once()
     {
         var calls = 0;
-        Assert.Equal(1, default(Option<int>).GetValueOrElse(() => ++calls));
+        Option<int> missing = Option.None;
+        Assert.Equal(1, missing.GetValueOrElse(() => ++calls));
         Assert.Equal(1, calls);
     }
 
@@ -47,6 +48,7 @@ public class LazyFallbackTests
     [Fact]
     public void Uninitialized_outcomes_do_not_invoke_a_fallback()
     {
+        Assert.Throws<SwitchExpressionException>(() => default(Option<int>).GetValueOrElse(() => throw new InvalidOperationException()));
         Assert.Throws<SwitchExpressionException>(() => default(Result<int, int>).GetValueOrElse(_ => throw new InvalidOperationException()));
         Assert.Throws<SwitchExpressionException>(() => default(Validation<int, int>).GetValueOrElse(_ => throw new InvalidOperationException()));
     }

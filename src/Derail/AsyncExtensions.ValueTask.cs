@@ -135,7 +135,11 @@ public static partial class AsyncExtensions
         /// <summary>Transforms the value with a ValueTask-returning function when present.</summary>
         [OverloadResolutionPriority(-1)]
         public async ValueTask<Option<TResult>> MapAsync<TResult>(Func<T, ValueTask<TResult>> map) =>
-            option is Some<T>(var value) ? Option.Some(await map(value).ConfigureAwait(false)) : Option.None;
+            option switch
+            {
+                Some<T>(var value) => Option.Some(await map(value).ConfigureAwait(false)),
+                None => Option.None,
+            };
 
         /// <summary>Chains a ValueTask-returning function when a value is present.</summary>
         [OverloadResolutionPriority(-1)]

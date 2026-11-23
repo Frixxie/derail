@@ -18,7 +18,7 @@ public class AsyncProperties
     [Property]
     public async Task<bool> Option_BindAsync_AgreesWithBind(bool present, int value, int minimum)
     {
-        Option<int> source = present ? Option.Some(value) : default(Option<int>);
+        Option<int> source = present ? Option.Some(value) : Option.None;
         Option<int> Keep(int x) => x >= minimum ? Option.Some(x) : Option.None;
 
         var expected = source.Bind(Keep);

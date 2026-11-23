@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using Derail;
 using Xunit;
@@ -83,18 +84,18 @@ public class OptionTests
         }
 
         [Fact]
-        public void DefaultArrayElement_IsTheNoneCase()
+        public void DefaultArrayElement_MatchesNeitherCase()
         {
             var options = new Option<int>[1];
             var option = options[0];
             Option<int> none = Option.None;
 
             option.IsSome.Should().BeFalse();
-            option.IsNone.Should().BeTrue();
-            (option is None).Should().BeTrue();
-            option.Should().Be(none);
+            option.IsNone.Should().BeFalse();
+            (option is None).Should().BeFalse();
+            option.Should().NotBe(none);
             option.Should().NotBe(Option.Some(0));
-            option.Match(_ => "some", () => "none").Should().Be("none");
+            Assert.Throws<SwitchExpressionException>(() => option.Match(_ => "some", () => "none"));
         }
 
         [Fact]
@@ -105,14 +106,12 @@ public class OptionTests
         }
 
         [Fact]
-        public async Task MappingDefault_PreservesNoneAcrossSyncAndAsyncPipelines()
+        public async Task MappingDefault_RejectsUninitializedOptionsAcrossSyncAndAsyncPipelines()
         {
             Option<int> option = default;
-            Option<string> none = Option.None;
-
-            option.Map(x => x.ToString()).Should().Be(none);
-            (await option.MapAsync(x => Task.FromResult(x.ToString()))).Should().Be(none);
-            (await option.MapAsync(x => ValueTask.FromResult(x.ToString()))).Should().Be(none);
+            Assert.Throws<SwitchExpressionException>(() => option.Map(x => x.ToString()));
+            await Assert.ThrowsAsync<SwitchExpressionException>(() => option.MapAsync(x => Task.FromResult(x.ToString())));
+            await Assert.ThrowsAsync<SwitchExpressionException>(() => option.MapAsync(x => ValueTask.FromResult(x.ToString())).AsTask());
         }
 
         [Fact]

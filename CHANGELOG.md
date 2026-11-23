@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;
+  combinators that inspect it throw `SwitchExpressionException`. Use `Option.None` for absence.
+
 - `Validation.Sequence` collects errors directly from their non-empty storage,
   avoiding one enumerator allocation per invalid input while preserving error order.
 

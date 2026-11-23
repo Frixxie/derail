@@ -126,7 +126,11 @@ public static partial class AsyncExtensions
 
         /// <summary>Transforms the value with an async function when present.</summary>
         public async Task<Option<TResult>> MapAsync<TResult>(Func<T, Task<TResult>> map) =>
-            option is Some<T>(var value) ? Option.Some(await map(value).ConfigureAwait(false)) : Option.None;
+            option switch
+            {
+                Some<T>(var value) => Option.Some(await map(value).ConfigureAwait(false)),
+                None => Option.None,
+            };
 
         /// <summary>Chains an async option-returning function when a value is present.</summary>
         public Task<Option<TResult>> BindAsync<TResult>(Func<T, Task<Option<TResult>>> bind) =>

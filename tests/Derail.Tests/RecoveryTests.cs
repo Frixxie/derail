@@ -32,7 +32,7 @@ public class RecoveryTests
     [Property]
     public bool OrElse_EvaluatesFallbackExactlyOnceForNone(bool present, int? value, bool found)
     {
-        Option<int?> source = present ? Option.Some(value) : default(Option<int?>);
+        Option<int?> source = present ? Option.Some(value) : Option.None;
         Option<int?> fallback = found ? Option.Some<int?>(3) : Option.None;
         var calls = 0;
         var actual = source.OrElse(() => { calls++; return fallback; });
@@ -87,7 +87,7 @@ public class RecoveryTests
     [InlineData(false)]
     public async Task Async_cache_miss_observes_and_recovers_only_a_typed_error(bool useValueTask)
     {
-        Option<int> missing = default;
+        Option<int> missing = Option.None;
         var observed = new List<string>();
         var result = useValueTask
             ? await ValueTask.FromResult(missing).OrElseAsync(() => ValueTask.FromResult(missing))

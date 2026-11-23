@@ -63,7 +63,7 @@ public class TraversalTests
         bool Accept(int x) { visits.Add(x); return x != 2; }
         switch (primitive)
         {
-            case "Option": Option.Traverse(Source(), x => Accept(x) ? Option.Some(x) : default(Option<int>)); break;
+            case "Option": Option.Traverse(Source(), x => Accept(x) ? Option.Some(x) : Option.None); break;
             case "Result": Result.Traverse(Source(), x => Accept(x) ? Result.Ok<int, int>(x) : Result.Error<int, int>(x)); break;
             case "Validation": Validation.Traverse(Source(), x => Accept(x) ? Validation.Valid<int, int>(x) : Validation.Invalid<int, int>(x)); break;
         }
@@ -107,6 +107,8 @@ public class TraversalTests
     public void Uninitialized_results_are_rejected_only_if_reached()
     {
         Result<int, int> missing = default;
+        Assert.Throws<SwitchExpressionException>(() => Option.Sequence<int>([default]));
+        Assert.True(Option.Sequence<int>([Option.None, default]).IsNone);
         Assert.Throws<SwitchExpressionException>(() => Result.Sequence([missing]));
         Assert.Equal(Result.Error<IReadOnlyList<int>, int>(1), Result.Sequence([Result.Error<int, int>(1), missing]));
         Assert.Throws<SwitchExpressionException>(() => Validation.Sequence([Validation.Invalid<int, int>(1), default]));

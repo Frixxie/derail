@@ -12,7 +12,7 @@ Derail is a lightweight library of functional programming primitives for C# 15 o
 - **`Reader<TEnv, T>` / `ReaderResult<TEnv, T, TError>`** — reusable computations with explicit dependencies.
 - **`AsyncReaderResult<TEnv, T, TError>`** — a reusable async workflow that receives its dependencies and cancellation token at execution.
 
-`Result` and `Validation` are native C# unions. `Option` also supports union pattern matching and treats its default value as `None`.
+`Option`, `Result`, and `Validation` are native C# unions.
 
 ## Requirements
 
@@ -31,7 +31,7 @@ releases; check the changelog when upgrading.
 
 ### Unreleased changes since 0.7.0
 
-Two changes may affect existing code:
+Three changes may affect existing code:
 
 1. **`NonEmpty<T>` dictionary and set keys now compare by ordered elements.** Two
    separately constructed keys with equal elements represent one entry. If your
@@ -51,8 +51,11 @@ Two changes may affect existing code:
    await result.TapAsync(value => UpdateViewAsync(value));
    ```
 
-If upgrading from before `0.7.0`, also check default-initialized options and
-validations: a default option is `None`, and `Validation.Zip` rejects an uninitialized
+3. **Initialize absent options with `Option.None` instead of `default`.** For example,
+   use `Option<int> count = Option.None;`. If every slot in an array should start
+   absent, use `Array.Fill(counts, Option.None)` after allocating the `Option<int>[]`.
+
+If upgrading from before `0.7.0`, note that `Validation.Zip` rejects an uninitialized
 operand even alongside an `Invalid`. For pre-`0.3.0` consumers, use
 `Result<T, NonEmpty<TError>>` for `Validation.ToResult()` and accept `NonEmpty<TError>`
 in the invalid branch of `Match`. See the [changelog](https://github.com/Frixxie/derail/blob/main/CHANGELOG.md) for examples.
@@ -136,12 +139,12 @@ These rules apply to `default` and to elements of newly allocated arrays:
 
 | Primitive | Meaning of `default` | Inspection and use |
 | --- | --- | --- |
-| `Option<T>` | `None` | Matches the `None` pattern, compares equal to an explicit `None`, and takes the absent branch of `Match`. |
+| `Option<T>` | Uninitialized; neither `Some<T>` nor `None` | `IsSome` and `IsNone` are both false. Initialize with `Option.Some(value)` or `Option.None` before use. |
 | `Result<T, TError>` | Uninitialized; neither `Ok` nor `Error` | `IsOk` and `IsError` are both false. Initialize with `Result.Ok` or `Result.Error` before use. |
 | `Validation<T, TError>` | Uninitialized; neither `Valid` nor `Invalid` | `IsValid` and `IsInvalid` are both false. Initialize with `Validation.Valid` or `Validation.Invalid` before use. |
 | `NonEmpty`, `Reader`, `ReaderResult`, `AsyncReaderResult`, `Writer` | `null` reference | No instance exists. Construct one before calling its members. |
 
-An uninitialized result or validation is a programming error, not a domain error.
+An uninitialized option, result, or validation is a programming error, not a domain outcome.
 Combinators such as `Match`, `Map`, and `GetValueOrDefault` throw
 `SwitchExpressionException` when they need to inspect its case. `Result.Zip`
 stops at a left-hand `Error`, so it never inspects the right-hand result in that

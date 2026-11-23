@@ -112,7 +112,7 @@ public class OptionProperties
     [Property]
     public bool Bind_RightIdentity(bool present, int? x)
     {
-        Option<int?> source = present ? Option.Some(x) : default(Option<int?>);
+        Option<int?> source = present ? Option.Some(x) : Option.None;
         return source.Bind(Option.Some).Equals(source);
     }
 

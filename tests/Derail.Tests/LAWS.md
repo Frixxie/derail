@@ -14,7 +14,7 @@ inputs, including pure `Func` values for composition and fallible continuations.
 | [NonEmptyTests](NonEmptyTests.cs) | `Map_Identity`, `Map_Composition`, `Append_Associativity`, `Append_PreservesBothInputs`. There is no empty concatenation identity. |
 | [AsyncProperties](AsyncProperties.cs) | `Option_BindAsync_AgreesWithBind`, `Result_EnsureAsync_AgreesWithEnsure`, `Result_MapAndBind_AgreeAcrossSyncTaskAndValueTask` compare successful and unsuccessful pipelines. [AsyncExecutionTests](AsyncExecutionTests.cs) covers faults and cancellation separately. |
 
-`OptionProperties.Bind_RightIdentity` includes `default(Option<T>)` (`None`) and
-present nullable payloads. Uninitialized `Result` and `Validation` values are
-outside the laws: [ResultTests](ResultTests.cs) and [ValidationTests](ValidationTests.cs)
+`OptionProperties.Bind_RightIdentity` includes explicit `None` and present nullable
+payloads. Uninitialized union values are outside the laws:
+[OptionTests](OptionTests.cs), [ResultTests](ResultTests.cs), and [ValidationTests](ValidationTests.cs)
 check their inspection, exception, and mixed-input behavior instead.
