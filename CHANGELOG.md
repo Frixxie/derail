@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `Option.Sequence`, `Option.Traverse`, `Result.Sequence`, `Result.Traverse`,
+  and `Validation.Traverse` for ordered, single-pass collection processing.
+
 - Added `Result.Recover`, `Result.TapError`, and `Option.OrElse` for handling typed
   errors and missing values, with `Task` and `ValueTask` pipeline support.
 

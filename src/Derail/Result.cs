@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Derail;
 
 /// <summary>A successful outcome.</summary>
@@ -19,6 +21,27 @@ public static class Result
 
     /// <summary>Creates a failed result.</summary>
     public static Result<T, TError> Error<T, TError>(TError error) => new Error<TError>(error);
+
+    /// <summary>Collects successes in order into an immutable snapshot, or stops at the first error.</summary>
+    public static Result<IReadOnlyList<T>, TError> Sequence<T, TError>(IEnumerable<Result<T, TError>> results)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        var values = ImmutableArray.CreateBuilder<T>();
+        foreach (var result in results)
+        {
+            switch (result)
+            {
+                case Ok<T>(var value): values.Add(value); break;
+                case Error<TError> error: return error;
+                default: throw new System.Runtime.CompilerServices.SwitchExpressionException(result);
+            }
+        }
+        return Ok<IReadOnlyList<T>, TError>(values.DrainToImmutable());
+    }
+
+    /// <summary>Maps elements in order and collects their values, stopping at the first error.</summary>
+    public static Result<IReadOnlyList<T>, TError> Traverse<TSource, T, TError>(IEnumerable<TSource> source, Func<TSource, Result<T, TError>> map) =>
+        Sequence(source.Select(map));
 }
 
 /// <summary>Combinators for <see cref="Result{T, TError}"/>.</summary>

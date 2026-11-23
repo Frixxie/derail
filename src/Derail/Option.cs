@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Derail;
 
 /// <summary>A present value.</summary>
@@ -30,6 +32,23 @@ public static class Option
 
     /// <summary>Wraps a present value.</summary>
     public static Option<T> Some<T>(T value) => new Some<T>(value);
+
+    /// <summary>Collects present values in order into an immutable snapshot. Stops at the first None.</summary>
+    public static Option<IReadOnlyList<T>> Sequence<T>(IEnumerable<Option<T>> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var values = ImmutableArray.CreateBuilder<T>();
+        foreach (var option in options)
+        {
+            if (option is not Some<T>(var value)) return None;
+            values.Add(value);
+        }
+        return Some<IReadOnlyList<T>>(values.DrainToImmutable());
+    }
+
+    /// <summary>Maps elements in order and collects their values, stopping at the first None.</summary>
+    public static Option<IReadOnlyList<T>> Traverse<TSource, T>(IEnumerable<TSource> source, Func<TSource, Option<T>> map) =>
+        Sequence(source.Select(map));
 
     /// <summary>Converts a nullable reference to an option.</summary>
     public static Option<T> FromNullable<T>(T? value) where T : class =>

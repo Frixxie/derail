@@ -390,6 +390,19 @@ Faults and cancellation from inputs or callbacks propagate to the caller; neithe
 becomes `None` or a typed `Error`. To cancel an operation, pass your token to the
 underlying async call inside the callback.
 
+### Collecting a sequence of values
+
+Use `Sequence` when each element is already an `Option`, `Result`, or `Validation`.
+Use `Traverse` when a function produces one for each input:
+
+```csharp
+Result<IReadOnlyList<int>, string> quantities = Result.Traverse(inputs, ParseQuantity);
+```
+
+Both collect immutable snapshots in input order. Empty input succeeds with an empty
+list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
+`Validation` reads every element and collects all errors in encounter order.
+
 ## API overview
 
 | | `Option<T>` | `Result<T, TError>` | `Validation<T, TError>` |
@@ -399,7 +412,8 @@ underlying async call inside the callback.
 | Transform | `Map`, `Where` | `Map`, `MapError` | `Map`, `MapErrors` |
 | Chain | `Bind`, LINQ | `Bind`, `Ensure`, LINQ | — (use `ToResult`) |
 | Recover | `OrElse` | `Recover` | — |
-| Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply`, `Sequence` (all errors) |
+| Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply` (all errors) |
+| Collect | `Option.Sequence`, `Option.Traverse` | `Result.Sequence`, `Result.Traverse` | `Validation.Sequence`, `Validation.Traverse` |
 | Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
 | Async (`Task` or `ValueTask`) | `MapAsync`, `BindAsync`, `OrElseAsync`, wrapped `Option<T>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, `RecoverAsync`, `TapErrorAsync`, wrapped `Result<T, TError>` extensions | — |

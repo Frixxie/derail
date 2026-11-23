@@ -34,6 +34,7 @@ timing. Fixtures are synthetic and created outside the timed methods.
 | `ReaderExecutionBenchmarks` | Repeated execution of prebuilt pipelines | Direct loop; nested delegates also measured |
 | `ReaderResultShortCircuitBenchmarks` | Prebuilt bind chains, either successful or failing before the first continuation | Direct short-circuiting control flow |
 | `ValidationSequenceBenchmarks` | All-valid, all-invalid, alternating batches of 1, 8, 32, 1024 | Local list accumulation with equivalent ordered results |
+| `TraversalBenchmarks` | `Option`/`Result` sequence of prebuilt inputs and traversal of raw inputs; `Validation` traversal of raw inputs | All succeed vs. odd items fail: short-circuit at item two vs. accumulating every failure |
 
 ## Interpretation
 

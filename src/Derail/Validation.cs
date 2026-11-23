@@ -83,6 +83,10 @@ public static class Validation
         var allErrors = errors.DrainToImmutable();
         return new Invalid<TError>(allErrors[0], allErrors.AsSpan()[1..]);
     }
+
+    /// <summary>Maps every element in order. Collects all values on success, otherwise all errors in encounter order.</summary>
+    public static Validation<IReadOnlyList<T>, TError> Traverse<TSource, T, TError>(IEnumerable<TSource> source, Func<TSource, Validation<T, TError>> map) =>
+        Sequence(source.Select(map));
 }
 
 /// <summary>Combinators for <see cref="Validation{T, TError}"/>.</summary>
