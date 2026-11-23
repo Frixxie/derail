@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 namespace Derail;
 
 /// <summary>A present value.</summary>
+/// <param name="Value">The payload, which may be null when <typeparamref name="T"/> allows it.</param>
 public readonly record struct Some<T>(T Value);
 
 /// <summary>The absence of a value.</summary>
@@ -16,9 +17,12 @@ public readonly struct Option<T>
     // Null storage denotes None; even Some(null) is stored as a boxed Some<T>.
     private readonly object? _some;
 
+    /// <summary>Constructs a present option, even when the case contains a null payload.</summary>
     public Option(Some<T> value) => _some = value;
+    /// <summary>Constructs an absent option, equivalent to the default option.</summary>
     public Option(None value) => _some = null;
 
+    /// <summary>Gets the active <see cref="Some{T}"/> or <see cref="None"/> case for union pattern matching.</summary>
     public object Value => _some ?? Option.BoxedNone;
 }
 

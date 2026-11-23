@@ -8,6 +8,7 @@ public sealed class ReaderResult<TEnv, T, TError>
     /// <summary>Wraps a fallible computation without running it.</summary>
     public ReaderResult(Func<TEnv, Result<T, TError>> run) => _reader = new(run);
 
+    /// <summary>Executes the computation with this environment, returning its success or first typed error.</summary>
     public Result<T, TError> Run(TEnv environment) => _reader.Run(environment);
 
     /// <summary>Exposes the underlying computation without running it.</summary>

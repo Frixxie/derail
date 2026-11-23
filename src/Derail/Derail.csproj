@@ -7,7 +7,6 @@
     <!-- Require an explicit ConfigureAwait choice in library code. -->
     <WarningsAsErrors>$(WarningsAsErrors);CA2007</WarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Description>Lightweight functional primitives for C# 15 on .NET 11. Use Result for typed errors, Option for missing values, Validation for independent checks that collect errors, Reader for explicit dependencies, and Writer for ordered events.</Description>
   </PropertyGroup>
 

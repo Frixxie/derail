@@ -24,10 +24,13 @@ public sealed class Writer<T, TEvent>
         _events = events;
     }
 
+    /// <summary>Gets the computed value without reading the event sequence.</summary>
     public T Value { get; }
 
+    /// <summary>Gets the ordered event snapshot, materializing deferred concatenations on first access.</summary>
     public IReadOnlyList<TEvent> Events => Flatten();
 
+    /// <summary>Returns the value and its ordered events, as if reading both properties.</summary>
     public void Deconstruct(out T value, out IReadOnlyList<TEvent> events) =>
         (value, events) = (Value, Events);
 

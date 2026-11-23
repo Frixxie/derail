@@ -28,6 +28,8 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
     /// <summary>The number of elements, always at least one.</summary>
     public int Count => 1 + _tail.Length;
 
+    /// <summary>Gets the element at a zero-based index; index zero returns the head.</summary>
+    /// <exception cref="IndexOutOfRangeException">The index is negative or at least <see cref="Count"/>.</exception>
     public T this[int index] => index == 0 ? Head : _tail[index - 1];
 
     // Let batch validation collect errors without allocating an enumerator per failed item.
@@ -37,12 +39,15 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
         destination.AddRange(_tail);
     }
 
+    /// <summary>Tests whether both collections have equal elements in the same order.</summary>
     public bool Equals(NonEmpty<T>? other) => ReferenceEquals(this, other)
         || other is not null && Count == other.Count && EqualityComparer<T>.Default.Equals(Head, other.Head)
             && _tail.AsSpan().SequenceEqual(other._tail.AsSpan(), EqualityComparer<T>.Default);
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is NonEmpty<T> other && Equals(other);
 
+    /// <summary>Hashes the elements in encounter order using their default equality comparer.</summary>
     public override int GetHashCode()
     {
         var hash = new HashCode();
@@ -51,7 +56,9 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
         return hash.ToHashCode();
     }
 
+    /// <summary>Compares ordered elements; two null references are equal.</summary>
     public static bool operator ==(NonEmpty<T>? left, NonEmpty<T>? right) => object.Equals(left, right);
+    /// <summary>Returns the negation of the ordered equality comparison.</summary>
     public static bool operator !=(NonEmpty<T>? left, NonEmpty<T>? right) => !(left == right);
 
     /// <summary>Transforms every element while preserving order and non-emptiness.</summary>
@@ -82,6 +89,7 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
         return Option.Some(new NonEmpty<T>(head, tail.DrainToImmutable()));
     }
 
+    /// <summary>Enumerates the head followed by every element of the tail.</summary>
     public IEnumerator<T> GetEnumerator()
     {
         yield return Head;

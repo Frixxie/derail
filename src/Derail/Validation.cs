@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 namespace Derail;
 
 /// <summary>A value that passed validation.</summary>
+/// <param name="Value">The validated payload.</param>
 public readonly record struct Valid<T>(T Value);
 
 /// <summary>One or more validation errors, in the order they were found.</summary>
@@ -17,6 +18,7 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     /// <summary>The errors, always containing at least one element.</summary>
     public NonEmpty<TError> Errors { get; }
 
+    /// <summary>Deconstructs this failure into its non-empty, ordered errors.</summary>
     public void Deconstruct(out NonEmpty<TError> errors) => errors = Errors;
 
     internal Invalid<TError> Concat(Invalid<TError> other) => new(Errors.Append(other.Errors));
@@ -24,15 +26,20 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
         new(Errors.Map(map));
 
+    /// <summary>Tests whether the other failure contains the same ordered errors.</summary>
     public bool Equals(Invalid<TError>? other) => other is not null && Errors.Equals(other.Errors);
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is Invalid<TError> other && Equals(other);
 
+    /// <summary>Returns the hash of the ordered errors.</summary>
     public override int GetHashCode() => Errors.GetHashCode();
 
+    /// <summary>Compares ordered errors; two null references are equal.</summary>
     public static bool operator ==(Invalid<TError>? left, Invalid<TError>? right) =>
         ReferenceEquals(left, right) || left is not null && left.Equals(right);
 
+    /// <summary>Returns the negation of the ordered equality comparison.</summary>
     public static bool operator !=(Invalid<TError>? left, Invalid<TError>? right) => !(left == right);
 }
 

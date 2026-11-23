@@ -1,6 +1,19 @@
 using Derail;
 using PackageConsumer;
 
+// Old case constructors and nullable factory calls must compile with warnings as errors.
+Result<string?, int> nullableSuccess = new Ok<string?>(null);
+string? nickname = null;
+Option<string> absent = Option.FromNullable(nickname);
+if (!absent.IsNone || !nullableSuccess.Match(value => value is null, _ => false))
+    throw new InvalidOperationException("Nullable payload changed its case.");
+
+var firstKey = new NonEmpty<string>("a");
+var sameElements = new NonEmpty<string>("a");
+var byInstance = new Dictionary<NonEmpty<string>, int>(ReferenceEqualityComparer.Instance) { [firstKey] = 1 };
+if (firstKey != sameElements || byInstance.ContainsKey(sameElements))
+    throw new InvalidOperationException("Unexpected key equality after migration.");
+
 var quantity = Option.Some(3).ToResult(() => "missing quantity");
 
 // An untyped async lambda must still select the Task overload.

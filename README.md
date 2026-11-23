@@ -33,12 +33,74 @@ their replacements in `CHANGELOG.md` and receive explicit maintainer approval
 before merge. If package validation needs an exception, suppress only the approved
 difference with a justification; do not skip validation or move the baseline to pass CI.
 
+Within the 1.x line, existing supported calls must continue to compile and existing
+binaries must continue to bind to their public members. Compatibility also covers
+observable behavior: nullable payloads and default cases, equality, evaluation
+order, error and event ordering, and the distinction between domain errors,
+exceptions, and cancellation. Internal storage, allocation counts, numeric hash
+codes, callback thread identity, and exception message text are not guarantees.
+
 `dotnet pack src/Derail -c Release -o artifacts` checks binary compatibility
 against the published baseline pinned in `Derail.csproj`. Advance that baseline
 to the latest stable package after each release. To check source compatibility,
 run `bash tests/PackageConsumer/check.sh artifacts/Derail.<version>.nupkg` with
 the file just packed. This compiles and runs representative consumer calls;
 when adding overloads, include inference-sensitive call sites in that fixture.
+
+### Migrating from 0.7.0 to 1.0
+
+Existing `0.7.0` public members are retained. Review these two behavioral changes:
+
+1. **`NonEmpty<T>` dictionary and set keys now compare by ordered elements.** Two
+   separately constructed keys with equal elements represent one entry. If your
+   keys identify *instances*, opt in to reference equality explicitly:
+
+   ```csharp
+   var byInstance = new Dictionary<NonEmpty<string>, int>(ReferenceEqualityComparer.Instance);
+   ```
+
+2. **`Task` combinators now follow the same await policy as `ValueTask` combinators.**
+   A callback after pending I/O should not update a UI control directly. For
+   example, replace `await pending.TapAsync(value => UpdateViewAsync(value))`
+   with an await in the UI handler, followed by the update there:
+
+   ```csharp
+   var result = await pending; // In the UI handler, retain its synchronization context.
+   await result.TapAsync(value => UpdateViewAsync(value));
+   ```
+
+If upgrading from before `0.7.0`, also check default-initialized options and
+validations: a default option is `None`, and `Validation.Zip` rejects an uninitialized
+operand even alongside an `Invalid`. For pre-`0.3.0` consumers, use
+`Result<T, NonEmpty<TError>>` for `Validation.ToResult()` and accept `NonEmpty<TError>`
+in the invalid branch of `Match`. See the [changelog](https://github.com/Frixxie/derail/blob/main/CHANGELOG.md) for examples.
+
+### Names, inference, and execution
+
+- `Map` changes the success value; `MapError` changes one result error, and
+  `Validation.MapErrors` maps every accumulated error. `Select` and `SelectMany`
+  are the C# query-syntax entry points. `GetValueOrElse` returns a plain value;
+  `OrElse` and `Recover` continue the computation. These are distinct contracts.
+- C# infers `Option.Some(value)` from its argument. A result factory must also
+  specify the type of the case it does not construct: `Result.Ok<int, string>(3)`.
+  With an expected type, a case constructor is shorter: `Result<int, string> r = new Ok<int>(3);`.
+  Similarly, a constant reader factory needs the environment type even though its value does not use it.
+- Nullable annotations describe the **payload**, not the case. `Result.Ok<string?, int>(null)`
+  is successful; `Option.FromNullable((string?)null)` is absent. Reference-type
+  readers, writers, and non-empty collections require constructed instances.
+- Plain values compose immediately. C# evaluates arguments before calling `Zip`;
+  a result can skip its combiner but cannot undo work that produced either argument.
+  Reader `Zip` instead runs its computations left to right at `Run`; a failing
+  reader skips the right computation. `Traverse` invokes its mapper during one
+  ordered pass. See [default initialization](#default-initialization) and [equality](#equality).
+- Async `Option` and `Result` pipelines support both `Task` and `ValueTask` for
+  dependent I/O. `Map` takes a synchronous callback; `MapAsync` awaits one.
+  For a synchronous operation without a wrapper overload, await the input first.
+  `AsyncReaderResult.Run` uses `Task`; validation remains synchronous and applicative.
+- Callback exceptions are not converted into typed errors. An async combinator
+  that forwards a delegate's task can throw before returning it if that delegate
+  throws synchronously. Await the whole call inside the `try` when handling an
+  exception. Cancellation remains cancellation; `Recover` only handles typed errors.
 
 ## Quick start: from input to outcome
 

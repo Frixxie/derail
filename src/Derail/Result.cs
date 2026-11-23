@@ -3,9 +3,11 @@ using System.Collections.Immutable;
 namespace Derail;
 
 /// <summary>A successful outcome.</summary>
+/// <param name="Value">The successful payload.</param>
 public readonly record struct Ok<T>(T Value);
 
 /// <summary>A failed outcome.</summary>
+/// <param name="Value">The domain error.</param>
 public readonly record struct Error<TError>(TError Value);
 
 /// <summary>The outcome of an operation: either <see cref="Ok{T}"/> or <see cref="Error{TError}"/>.</summary>
