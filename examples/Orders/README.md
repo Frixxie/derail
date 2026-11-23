@@ -7,19 +7,24 @@ An order has a description, one or more lines and, optionally, one shipment. Cre
 | Order | `POST /orders` | `GET /orders` or `GET /orders/{id}` | `PUT /orders/{id}` | `DELETE /orders/{id}` |
 | Shipment | `PUT /orders/{id}/shipment` | `GET /orders/{id}/shipment` | `PUT /orders/{id}/shipment` | `DELETE /orders/{id}/shipment` |
 
-Creating an order returns `201` and a `Location` header. With an `Idempotency-Key` header, a retry with the same order returns the original `201`, while a different order with that key returns `422`. Each line has a `sku` and a positive `quantity`; updating an order replaces its description and lines. `GET /orders` accepts optional `limit` (1–100, default 50), `after` (return IDs greater than this) and `shipped` (`true` or `false`) query parameters. Putting a shipment returns `200` with the saved carrier and tracking number. The first shipment records an `order-shipped` event, a different one records `shipment-changed`, and repeating it records nothing. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
+Two more endpoints change shipments: `PUT /orders/{id}/shipment/delivery` marks a shipment delivered, and `POST /shipments` ships several orders at once.
+
+- **Orders:** Each line has a `sku` and a positive `quantity`. Creating an order returns `201` and a `Location` header; updating it replaces the description and lines. With an `Idempotency-Key` header, a retry with the same order returns the original `201`, and a different order with that key returns `422`.
+- **Listing:** `GET /orders` accepts optional `limit` (1–100, default 50), `after` (only IDs greater than this) and `shipped` (`true` or `false`) query parameters.
+- **Shipments:** Putting a shipment returns `200` with the saved carrier and tracking number. The first shipment records an `order-shipped` event, a different one records `shipment-changed`, and repeating it records nothing. Once the shipment is delivered, changing or deleting it returns `409`. Deleting a shipment leaves the order intact; deleting an order removes both.
+- **Import:** `POST /shipments` takes `[{ "orderId", "carrier", "tracking" }]`. It reports every invalid row at once, such as `[1].carrier`, then ships each order in one transaction. If an order cannot be shipped, it returns that row's `404` or `409` with its `index` and saves nothing.
+- **Status codes:** Successful deletes return `204`, missing resources `404`, and invalid input `400` with every error.
 
 ## How it uses Derail
 
-- [Field validation](ApiInput.cs) chains rules with `Result.Ensure`, so each field reports its first failed rule.
-- `Validation.Zip` combines independent fields, so one `400` lists every invalid field.
-- [Order lines](OrderEndpoints.cs) are a `NonEmpty`. The first line and the `Validation.Traverse` of the rest are combined with `Zip`, and `MapErrors` adds the line index to each field, such as `lines[2].quantity`.
-- Single-row reads return an `Option`; [`Match`](ApiResults.cs) turns it into `200` or `404`.
-- Optional query parameters are parsed into an `Option`: `GetValueOrDefault` supplies a default, and `Match` turns `shipped` into an optional SQL filter.
-- Shipment changes are [`AsyncReaderResult` steps](ShipmentEndpoints.cs) sharing one connection: `Lock` reads the order `FOR UPDATE`, `Ensure` applies the delivery rule, and `Bind` runs the write. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success.
-- A `ShipmentError` says why a step failed, and one `switch` maps it to `404` or `409`.
-- Creating an order `Recover`s from a used idempotency key. The insert step fails with that key, and `Replay` returns the stored order or a `KeyReused` error, so the error type changes from `string` to `OrderError`.
-- [`Shipping.Ship`](Shipping.cs) is a pure function that returns the shipment as a `Writer` with the events it implies. The `Save` step writes the shipment and its events in the same transaction.
+- **`Result.Ensure`** chains the rules for one [field](ApiInput.cs), so each field reports its first failed rule.
+- **`Validation.Zip`** combines independent fields, so one `400` lists every invalid field.
+- **`NonEmpty`, `Validation.Traverse` and `MapErrors`** validate [order lines](OrderEndpoints.cs). The first line and the rest are combined with `Zip`, and `MapErrors` prefixes each error with its line, such as `lines[2].quantity`. The [shipment import](ShipmentEndpoints.cs) prefixes errors with the row in the same way.
+- **`Option`** marks absent values: a missing row, an unset query parameter (`GetValueOrDefault` supplies the default and `Match` builds the optional `shipped` filter), and an unshipped order, where `Zip` combines carrier and tracking.
+- **`AsyncReaderResult`** composes the steps of a write. `Lock` reads the order `FOR UPDATE`, `Ensure` applies the delivery rule, and `Bind` runs the write. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success. The import loops inside one step instead of chaining a `Bind` per row.
+- **Typed errors:** `ShipmentError` and `OrderError` say why a step failed, and one `switch` for each resource maps them to `404`, `409` or `422`.
+- **`Recover`** makes creating an order safe to retry. The insert step fails with the used idempotency key, and `Replay` returns the stored order or a `KeyReused` error.
+- **`Writer`:** [`Shipping.Ship`](Shipping.cs) is a pure function that returns the shipment with the events it implies; `Save` writes both in the same transaction.
 
 ## Try it
 
@@ -42,4 +47,4 @@ curl http://127.0.0.1:5080/orders/1/shipment
 ```
 
 The schema is initialized on first startup. To clean up, or reset an older disposable example database before starting, run `docker compose -f examples/Orders/compose.yaml down --volumes` (this deletes its sample data).
-To run the [integration tests](../Orders.Tests/ShipmentTests.cs), use `dotnet test --project examples/Orders.Tests`; they start their own database.
+To run the [tests](../Orders.Tests), use `dotnet test --project examples/Orders.Tests`; the integration tests start their own database.

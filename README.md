@@ -587,8 +587,8 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 
 ## Build, test and benchmark
 
-The [orders and shipments API](examples/Orders/README.md) shows CRUD with DbReader,
-using `Validation` for request fields and `Option` for a missing order.
+The [orders and shipments API](examples/Orders/README.md) uses every primitive except the
+synchronous `Reader` and `ReaderResult` in an ASP.NET Core API backed by PostgreSQL and DbReader.
 
 ```sh
 dotnet build

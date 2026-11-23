@@ -119,6 +119,54 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal("shipment-not-found", problem.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task Import_reports_every_invalid_row_before_reading_orders()
+    {
+        var response = await api.Client.PostAsJsonAsync("/shipments", new object[]
+        {
+            new { orderId = 800, carrier = "Parcel", tracking = "SYN-1" },
+            new { orderId = 801, carrier = "", tracking = "SYN-2" },
+            new { orderId = 802, carrier = "Parcel", tracking = " " },
+        }, TestContext.Current.CancellationToken);
+
+        var problem = await Problem(response, HttpStatusCode.BadRequest);
+        var errors = problem.GetProperty("errors").Deserialize<Dictionary<string, string[]>>();
+        Assert.Equal(new Dictionary<string, string[]> { ["[1].carrier"] = ["required"], ["[2].tracking"] = ["required"] }, errors);
+    }
+
+    [Fact]
+    public async Task Import_stops_at_the_first_failing_order_and_keeps_nothing()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (810, 'Sample'), (812, 'Sample')");
+
+        var response = await api.Client.PostAsJsonAsync("/shipments", new object[]
+        {
+            new { orderId = 810, carrier = "Parcel", tracking = "SYN-1" },
+            new { orderId = 811, carrier = "Parcel", tracking = "SYN-2" },
+            new { orderId = 812, carrier = "Parcel", tracking = "SYN-3" },
+        }, TestContext.Current.CancellationToken);
+
+        var problem = await Problem(response, HttpStatusCode.NotFound);
+        Assert.Equal("order-not-found", problem.GetProperty("code").GetString());
+        Assert.Equal(1, problem.GetProperty("index").GetInt32());
+        Assert.Equal(0L, await api.Scalar<long>("SELECT count(*) FROM orders WHERE id IN (810, 812) AND carrier IS NOT NULL"));
+    }
+
+    [Fact]
+    public async Task Import_ships_every_order()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (820, 'Sample'), (821, 'Sample')");
+
+        var response = await api.Client.PostAsJsonAsync("/shipments", new object[]
+        {
+            new { orderId = 820, carrier = "Parcel", tracking = "SYN-1" },
+            new { orderId = 821, carrier = "Parcel", tracking = "SYN-2" },
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal("SYN-1,SYN-2", await api.Scalar<string>("SELECT string_agg(tracking, ',' ORDER BY id) FROM orders WHERE id IN (820, 821)"));
+    }
+
     private sealed record ShipmentBody(string Carrier, string Tracking);
     private sealed record DeliveredBody(string Carrier, string Tracking, bool Delivered);
 

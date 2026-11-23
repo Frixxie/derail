@@ -19,4 +19,5 @@ shipments.MapPut("", ShipmentEndpoints.Put);
 shipments.MapGet("", ShipmentEndpoints.Get);
 shipments.MapDelete("", ShipmentEndpoints.Delete);
 shipments.MapPut("/delivery", ShipmentEndpoints.Deliver);
+app.MapPost("/shipments", ShipmentEndpoints.Import);
 app.Run();
