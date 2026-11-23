@@ -7,6 +7,38 @@ namespace Derail.Tests;
 
 public class NonEmptyTests
 {
+    [Property]
+    public bool EqualSnapshots_AgreeAcrossEqualityAndHashLookup(int? head, int?[] tail)
+    {
+        var a = new NonEmpty<int?>(head, tail);
+        var b = new NonEmpty<int?>(head, tail);
+        var c = a.Map(x => x);
+
+        return a.Equals(a) && a == b && b == a && b == c && a == c
+            && a.Equals((object)b) && new HashSet<NonEmpty<int?>> { a }.Contains(b);
+    }
+
+    [Property]
+    public bool Equality_DistinguishesOrderAndLength(int head, int[] tail)
+    {
+        var a = new NonEmpty<int>(head, [.. tail, head, ~head]);
+        var reordered = new NonEmpty<int>(head, [.. tail, ~head, head]);
+        var shorter = new NonEmpty<int>(head, [.. tail, head]);
+
+        return a != reordered && !a.Equals(shorter) && !a.Equals(new NonEmpty<int>(~head, [.. tail, head, ~head]));
+    }
+
+    [Fact]
+    public void NullReference_IsDistinctFromACollectionContainingNull()
+    {
+        NonEmpty<string?>? absent = null;
+        var singleton = new NonEmpty<string?>(null);
+
+        Assert.True(absent == null);
+        Assert.True(absent != singleton);
+        Assert.False(singleton.Equals(absent));
+    }
+
     [Fact]
     public void Singleton_HasAnEmptyTail()
     {

@@ -4,8 +4,9 @@ using System.Collections.Immutable;
 namespace Derail;
 
 /// <summary>An immutable ordered collection with a required first element.</summary>
-/// <remarks>A reference type so that default initialization cannot create an empty instance.</remarks>
-public sealed class NonEmpty<T> : IReadOnlyList<T>
+/// <remarks>A reference type so that default initialization cannot create an empty instance.
+/// Equality compares elements in order with the default element comparer.</remarks>
+public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
 {
     private readonly ImmutableArray<T> _tail;
 
@@ -28,6 +29,23 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>
     public int Count => 1 + _tail.Length;
 
     public T this[int index] => index == 0 ? Head : _tail[index - 1];
+
+    public bool Equals(NonEmpty<T>? other) => ReferenceEquals(this, other)
+        || other is not null && Count == other.Count && EqualityComparer<T>.Default.Equals(Head, other.Head)
+            && _tail.AsSpan().SequenceEqual(other._tail.AsSpan(), EqualityComparer<T>.Default);
+
+    public override bool Equals(object? obj) => obj is NonEmpty<T> other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Head);
+        foreach (var item in _tail) hash.Add(item);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(NonEmpty<T>? left, NonEmpty<T>? right) => object.Equals(left, right);
+    public static bool operator !=(NonEmpty<T>? left, NonEmpty<T>? right) => !(left == right);
 
     /// <summary>Transforms every element while preserving order and non-emptiness.</summary>
     public NonEmpty<TResult> Map<TResult>(Func<T, TResult> map) =>

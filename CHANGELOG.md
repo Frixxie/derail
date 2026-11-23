@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Behavior change:** `NonEmpty<T>` now compares and hashes by ordered elements.
+  Distinct collections with equal elements represent the same dictionary or set
+  key. For identity comparisons use `ReferenceEquals`; for identity-based keys
+  pass `ReferenceEqualityComparer.Instance` to the dictionary or set constructor.
+
 - `Task` combinators now follow the same await policy as `ValueTask` combinators.
   Callbacks after pending inputs no longer request the caller's synchronization
   context. If a callback updates a UI, dispatch that update to the UI thread.

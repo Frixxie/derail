@@ -97,6 +97,23 @@ case. `Validation.Zip` inspects both inputs to accumulate errors and rejects an
 uninitialized input on either side. `Validation.Sequence` likewise rejects an
 uninitialized element even after an `Invalid`.
 
+### Equality
+
+- `Option`, `Result`, and `Validation` compare by case and payload using `Equals`
+  or the default .NET equality comparer. For `Invalid`, every error and its
+  position must match.
+- `NonEmpty<T>` compares by length and element order using
+  `EqualityComparer<T>.Default`. `Equals`, `==`, and hash-based collections use
+  the same rule. Comparing or hashing can visit every element. As with other
+  dictionary keys, keep element equality and hash codes stable while the key is stored.
+- `Writer` uses reference equality. Comparing or hashing a writer does not walk
+  or materialize its event history. To compare outcomes, compare `Value` and
+  use `left.Events.SequenceEqual(right.Events)`; reading `Events` can allocate
+  the flattened event list on first access.
+- `Reader` and `ReaderResult` also use reference equality. Equality never runs
+  a computation. To compare outcomes for a particular environment, run both
+  readers with that environment and compare their results.
+
 ### Option: values that may be missing
 
 `Option.Some(0)` and `Option.Some<string?>(null)` are both present: `Match`

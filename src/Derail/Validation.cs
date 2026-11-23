@@ -24,12 +24,11 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
         new(Errors.Map(map));
 
-    public bool Equals(Invalid<TError>? other) => other is not null && Errors.SequenceEqual(other.Errors);
+    public bool Equals(Invalid<TError>? other) => other is not null && Errors.Equals(other.Errors);
 
     public override bool Equals(object? obj) => obj is Invalid<TError> other && Equals(other);
 
-    public override int GetHashCode() =>
-        Errors.Aggregate(new HashCode(), (hash, error) => { hash.Add(error); return hash; }).ToHashCode();
+    public override int GetHashCode() => Errors.GetHashCode();
 
     public static bool operator ==(Invalid<TError>? left, Invalid<TError>? right) =>
         ReferenceEquals(left, right) || left is not null && left.Equals(right);
