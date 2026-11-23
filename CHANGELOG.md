@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `Validation.Sequence` collects errors directly from their non-empty storage,
+  avoiding one enumerator allocation per invalid input while preserving error order.
+
 - Added `ReaderResult.FromResult` for computed outcomes and `ReaderResult.FromLookup`
   for optional environment lookups with a lazy missing-value error.
 

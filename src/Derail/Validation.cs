@@ -70,7 +70,7 @@ public static class Validation
                     break;
                 case Invalid<TError> invalid:
                     errors ??= ImmutableArray.CreateBuilder<TError>();
-                    errors.AddRange(invalid.Errors);
+                    invalid.Errors.CopyTo(errors);
                     break;
                 default:
                     throw new System.Runtime.CompilerServices.SwitchExpressionException(validation);

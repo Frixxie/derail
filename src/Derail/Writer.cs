@@ -7,7 +7,7 @@ namespace Derail;
 public sealed class Writer<T, TEvent>
 {
     // Bind joins event trees in constant time; Events flattens once and caches the result.
-    // The cache write is a single reference assignment, so concurrent readers at worst flatten twice.
+    // Concurrent first reads may each flatten the immutable tree before one cached leaf is observed.
     private EventTree<TEvent> _events;
 
     /// <summary>Pairs a value with a snapshot of its events in encounter order.</summary>

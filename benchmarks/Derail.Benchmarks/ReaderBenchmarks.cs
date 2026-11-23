@@ -5,7 +5,7 @@ namespace Derail.Benchmarks;
 [MemoryDiagnoser]
 public class ReaderConstructionBenchmarks
 {
-    [Params(1, 8, 32)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Steps { get; set; }
 
     [GlobalSetup]
@@ -57,7 +57,7 @@ public class ReaderConstructionBenchmarks
 [MemoryDiagnoser]
 public class ReaderExecutionBenchmarks
 {
-    [Params(1, 8, 32)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Steps { get; set; }
 
     // Mutable input prevents a compile-time constant baseline.
@@ -105,7 +105,7 @@ public class ReaderExecutionBenchmarks
 [MemoryDiagnoser]
 public class ReaderResultShortCircuitBenchmarks
 {
-    [Params(1, 8, 32)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Steps { get; set; }
 
     [Params(false, true)]

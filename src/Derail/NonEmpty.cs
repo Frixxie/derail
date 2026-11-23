@@ -30,6 +30,13 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
 
     public T this[int index] => index == 0 ? Head : _tail[index - 1];
 
+    // Let batch validation collect errors without allocating an enumerator per failed item.
+    internal void CopyTo(ImmutableArray<T>.Builder destination)
+    {
+        destination.Add(Head);
+        destination.AddRange(_tail);
+    }
+
     public bool Equals(NonEmpty<T>? other) => ReferenceEquals(this, other)
         || other is not null && Count == other.Count && EqualityComparer<T>.Default.Equals(Head, other.Head)
             && _tail.AsSpan().SequenceEqual(other._tail.AsSpan(), EqualityComparer<T>.Default);

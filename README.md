@@ -335,6 +335,10 @@ and reruns the computation on each invocation. `Local` adapts an outer environme
 `Reader.Pure<TEnv, T>(value)` ignores it. Delegates and reference values are not cloned,
 and neither purity nor thread safety is enforced.
 
+`Reader` and `ReaderResult` execute nested delegates. For an unbounded collection,
+iterate inside one computation instead of chaining one `Map` or `Bind` per item;
+the latter consumes stack as the chain grows. See the [large-chain measurements](benchmarks/large-chains.md).
+
 `ReaderResult<TEnv, T, TError>` combines this with Derail's short-circuiting `Result`:
 
 ```csharp

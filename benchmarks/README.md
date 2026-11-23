@@ -31,13 +31,17 @@ timing. Fixtures are synthetic and created outside the timed methods.
 | `NonEmptyMapBenchmarks` | Mapping 1, 8, 32, 1024 elements | An array loop producing the same elements |
 | `NonEmptyConstructionBenchmarks` | Head/tail construction, sequence conversion, repeated singleton append | Direct head/tail construction |
 | `WriterBenchmarks` | Repeated single-event `Bind` versus bulk construction | A local list accumulator, snapshotted into a Writer |
-| `ReaderConstructionBenchmarks` | Building map/bind/result pipelines of 1, 8, 32 steps | Equivalent nested delegates |
+| `WriterReadBenchmarks` | First read of an unflattened tree vs. last-event lookup on a cached writer | 1,024 and 4,096 events; construction excluded |
+| `ReaderConstructionBenchmarks` | Building map/bind/result pipelines up to 4,096 steps | Equivalent nested delegates |
 | `ReaderExecutionBenchmarks` | Repeated execution of prebuilt pipelines | Direct loop; nested delegates also measured |
 | `ReaderResultShortCircuitBenchmarks` | Prebuilt bind chains, either successful or failing before the first continuation | Direct short-circuiting control flow |
-| `ValidationSequenceBenchmarks` | All-valid, all-invalid, alternating batches of 1, 8, 32, 1024 | Local list accumulation with equivalent ordered results |
+| `ValidationSequenceBenchmarks` | All-valid, all-invalid, alternating batches up to 4,096 items | Local list accumulation with equivalent ordered results |
 | `TraversalBenchmarks` | `Option`/`Result` sequence of prebuilt inputs and traversal of raw inputs; `Validation` traversal of raw inputs | All succeed vs. odd items fail: short-circuit at item two vs. accumulating every failure |
 
 ## Interpretation
+
+See [Large composition chains](large-chains.md) for the stack-reserve probe, Writer
+read costs, repeated append scaling, and updated validation measurements.
 
 - Construction and repeated execution are separate Reader benchmarks. `Bind`
   creates the next reader during execution; those allocations deliberately remain

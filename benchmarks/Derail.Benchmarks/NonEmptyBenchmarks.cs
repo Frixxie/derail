@@ -35,7 +35,7 @@ public class NonEmptyMapBenchmarks
 [MemoryDiagnoser]
 public class NonEmptyConstructionBenchmarks
 {
-    [Params(1, 8, 32, 1024)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Count { get; set; }
 
     private int[] _values = null!;

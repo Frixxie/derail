@@ -5,7 +5,7 @@ namespace Derail.Benchmarks;
 [MemoryDiagnoser]
 public class WriterBenchmarks
 {
-    [Params(1, 8, 32, 1024)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Count { get; set; }
 
     private int[] _events = null!;
@@ -40,4 +40,39 @@ public class WriterBenchmarks
     // Bulk receives precomputed events: it isolates snapshot cost, not event computation.
     [Benchmark]
     public Writer<int, int> Bulk() => new(Count, _events);
+}
+
+[MemoryDiagnoser]
+public class WriterReadBenchmarks
+{
+    [Params(1024, 4096)] public int Count { get; set; }
+    private const int Batch = 32;
+    private Writer<int, int> _unread = null!;
+    private Writer<int, int> _cached = null!;
+    private readonly Writer<int, int>[] _fresh = new Writer<int, int>[Batch];
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _unread = new WriterBenchmarks { Count = Count }.Bind();
+        _cached = _unread.Map(static x => x);
+        if (!_cached.Events.SequenceEqual(Enumerable.Range(0, Count))) throw new InvalidOperationException("Events differ");
+    }
+
+    // Each copy shares the immutable event tree but has its own, still-empty flatten cache.
+    [IterationSetup(Target = nameof(FirstRead))]
+    public void Reset()
+    {
+        for (var i = 0; i < Batch; i++) _fresh[i] = _unread.Map(static x => x);
+    }
+
+    [Benchmark(OperationsPerInvoke = Batch)]
+    public int FirstRead()
+    {
+        var sum = 0;
+        foreach (var writer in _fresh) sum += writer.Events[^1];
+        return sum;
+    }
+
+    [Benchmark] public int CachedRead() => _cached.Events[^1];
 }

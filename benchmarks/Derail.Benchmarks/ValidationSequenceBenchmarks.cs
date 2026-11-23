@@ -5,7 +5,7 @@ namespace Derail.Benchmarks;
 [MemoryDiagnoser]
 public class ValidationSequenceBenchmarks
 {
-    [Params(1, 8, 32, 1024)]
+    [Params(1, 8, 32, 1024, 4096)]
     public int Count { get; set; }
 
     /// <summary>Zero means all valid, one means all invalid, two means alternating.</summary>

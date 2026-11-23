@@ -96,6 +96,25 @@ public class WriterTests
     }
 
     [Fact]
+    public async Task Concurrent_first_reads_return_complete_ordered_snapshots()
+    {
+        const int count = 4096;
+        var writer = Writer.Pure<int, int>(0);
+        for (var i = 0; i < count; i++) writer = writer.Bind(static x => new Writer<int, int>(x + 1, [x]));
+
+        using var start = new Barrier(4);
+        var token = TestContext.Current.CancellationToken;
+        var readers = Enumerable.Range(0, start.ParticipantCount).Select(_ => Task.Factory.StartNew(() =>
+        {
+            start.SignalAndWait(token);
+            return writer.Events;
+        }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+        var snapshots = await Task.WhenAll(readers);
+        foreach (var events in snapshots.Append(writer.Events)) Assert.Equal(Enumerable.Range(0, count), events);
+    }
+
+    [Fact]
     public void Bind_LongLeftNestedChain_KeepsEventOrder()
     {
         const int count = 100_000;

@@ -243,6 +243,18 @@ public class ValidationTests
                 .Should().Be("'x' is not a number,'y' is not a number");
 
         [Fact]
+        public void Sequence_keeps_nulls_and_duplicates_across_single_and_multi_error_inputs()
+        {
+            var result = Validation.Sequence(new[]
+            {
+                Validation.Invalid<int, string?>(null), Validation.Valid<int, string?>(1),
+                Validation.Invalid<int, string?>("again", null, "again"),
+            });
+            Assert.Equal(new string?[] { null, "again", null, "again" },
+                result.Match(_ => throw new InvalidOperationException("expected errors"), errors => errors.ToArray()));
+        }
+
+        [Fact]
         public void SingleInvalid_PreservesItsRequiredFirstError()
         {
             Validation<int, string> invalid = new Invalid<string>("required");
