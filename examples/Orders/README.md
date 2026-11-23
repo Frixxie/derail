@@ -6,28 +6,28 @@ Core, explicit SQL, and Npgsql. The Derail NuGet package does not depend on them
 
 ## Run the integration tests
 
-From the repository root, with the .NET 11 SDK, PostgreSQL server tools (`pg_config`,
-`initdb`, `pg_ctl`, `psql`), Bash and Python 3 installed:
+From the repository root, with the .NET 11 SDK, Docker with Compose, Bash and
+Python 3 installed:
 
 ```sh
 bash examples/Orders/test.sh
 ```
 
-The script creates a temporary PostgreSQL cluster on a private Unix socket, seeds
-synthetic orders, and starts Kestrel on a loopback port. It tests the real HTTP
+The script starts a fresh PostgreSQL container from [`compose.yaml`](compose.yaml)
+on `127.0.0.1:55432` (set `ORDERS_DB_PORT` to use another port), seeds synthetic
+orders, and starts Kestrel on a loopback port. It tests the real HTTP
 endpoint and checks the stored rows. To prove rollback, it makes the event insert
 fail **after** the order update, expects HTTP 500, and verifies that the order
-is still unshipped. It shuts down both processes and removes the database on exit.
+is still unshipped. It stops the API and removes the container and its data on exit.
 
 ## Try a request
 
-With a fresh, **local** PostgreSQL database selected for `psql`, initialize it
-once and point the app at that same database:
+Start a local database with the schema, add an order, and point the app at it:
 
 ```sh
-psql -v ON_ERROR_STOP=1 -f examples/Orders/schema.sql
-psql -c 'INSERT INTO orders (id) VALUES (1)'
-ConnectionStrings__Orders='Host=localhost;Database=orders_demo' \
+docker compose -f examples/Orders/compose.yaml up --detach --wait
+docker compose -f examples/Orders/compose.yaml exec postgres psql -c 'INSERT INTO orders (id) VALUES (1)'
+ConnectionStrings__Orders='Host=127.0.0.1;Port=55432;Username=sample;Database=orders' \
   dotnet run --project examples/Orders --urls http://127.0.0.1:5080
 ```
 
@@ -35,6 +35,8 @@ ConnectionStrings__Orders='Host=localhost;Database=orders_demo' \
 curl -i -X PUT http://127.0.0.1:5080/orders/1/shipment \
   -H 'Content-Type: application/json' -d '{"carrier":"Parcel","tracking":"SYN-001"}'
 ```
+
+Remove the database with `docker compose -f examples/Orders/compose.yaml down --volumes`.
 
 | Outcome | HTTP contract |
 | --- | --- |

@@ -1,4 +1,4 @@
-"""Run via test.sh, which provides the isolated cluster and base URL."""
+"""Run via test.sh, which provides the disposable database container and base URL."""
 import json
 import subprocess
 import sys
@@ -23,7 +23,8 @@ def ship(order_id, payload, expected_status):
 
 
 def sql(statement):
-    return subprocess.check_output(["psql", "-XAt", "-v", "ON_ERROR_STOP=1", "-c", statement], text=True).strip()
+    return subprocess.check_output(["docker", "compose", "exec", "-T", "postgres",
+                                    "psql", "-XAt", "-v", "ON_ERROR_STOP=1", "-c", statement], text=True).strip()
 
 
 shipment = {"carrier": "Parcel", "tracking": "SYN-001"}
