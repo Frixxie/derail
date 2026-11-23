@@ -24,6 +24,7 @@ timing. Fixtures are synthetic and created outside the timed methods.
 | Class | Measures | Baseline / comparison |
 | --- | --- | --- |
 | `ResultBenchmarks` | Parsing, positivity check, and mapping; valid, malformed, zero, negative inputs | Equivalent `TryParse` control flow |
+| `UnionConstructionBenchmarks`, `UnionOperationBenchmarks`, `UnionPipelineBenchmarks` | Escaping case construction, isolated combinators, and whole pipelines | Nullable values, imperative branches, CSharpFunctionalExtensions, and FluentResults. [Results and reproduction](union-overhead.md) |
 | `ResultTapBenchmarks` | Record a successful value in a field, or skip an upstream error | Direct success branch and field assignment |
 | `ResultEnsureBenchmarks` | Check a prebuilt result: pass, reject, or preserve an upstream error | Direct positivity check and error construction |
 | `ResultAsyncGuardBenchmarks` | Chain `EnsureAsync` and `TapAsync` on passing, rejected, and already-failed results using completed tasks | Direct branches awaiting the same predicate and observation; measures pipeline overhead without I/O |
