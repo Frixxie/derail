@@ -571,6 +571,7 @@ together in ASP.NET Core, with PostgreSQL transactions and HTTP integration test
 ```sh
 dotnet build
 dotnet test --project tests/Derail.Tests
+dotnet test --project tests/Derail.Analyzers.Tests
 dotnet run -c Release --project benchmarks/Derail.Benchmarks
 ```
 
@@ -601,7 +602,9 @@ are disposable directories inside the container. Only the repository is mounted 
 
 ```
 src/Derail/                  Library: Option, Result, Validation, NonEmpty, Writer, Reader, async extensions
+src/Derail.Analyzers/        Roslyn analyzer shipped in the package (DRL001)
 tests/Derail.Tests/          Unit, property-based and example tests
+tests/Derail.Analyzers.Tests Analyzer tests against in-process compilations
 benchmarks/Derail.Benchmarks BenchmarkDotNet benchmarks
 ```
 

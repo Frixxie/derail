@@ -35,7 +35,9 @@
   <!-- Pack the analyzer from the path its project reference resolves to, not a hard-coded bin directory. -->
   <Target Name="PackOptionAnalyzer" DependsOnTargets="ResolveProjectReferences">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="@(Analyzer)" Condition="'%(Analyzer.Filename)' == 'Derail.Analyzers'" PackagePath="analyzers/dotnet/cs/" />
+      <_OptionAnalyzer Include="@(Analyzer)" Condition="'%(Analyzer.Filename)' == 'Derail.Analyzers'" />
+      <TfmSpecificPackageFile Include="@(_OptionAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
     </ItemGroup>
+    <Error Condition="'@(_OptionAnalyzer)' == ''" Text="Derail.Analyzers.dll was not resolved, so the package would ship without DRL001." />
   </Target>
 </Project>

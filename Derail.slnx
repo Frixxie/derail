@@ -10,6 +10,7 @@
     <Project Path="examples/Orders/Orders.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Derail.Analyzers.Tests/Derail.Analyzers.Tests.csproj" />
     <Project Path="tests/Derail.Tests/Derail.Tests.csproj" />
   </Folder>
 </Solution>
