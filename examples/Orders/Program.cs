@@ -18,4 +18,5 @@ var shipments = orders.MapGroup("/{id:long}/shipment");
 shipments.MapPut("", ShipmentEndpoints.Put);
 shipments.MapGet("", ShipmentEndpoints.Get);
 shipments.MapDelete("", ShipmentEndpoints.Delete);
+shipments.MapPut("/delivery", ShipmentEndpoints.Deliver);
 app.Run();

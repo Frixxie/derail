@@ -7,9 +7,15 @@ An order has a description and, optionally, one shipment. Create an order first,
 | Order | `POST /orders` | `GET /orders` or `GET /orders/{id}` | `PUT /orders/{id}` | `DELETE /orders/{id}` |
 | Shipment | `PUT /orders/{id}/shipment` | `GET /orders/{id}/shipment` | `PUT /orders/{id}/shipment` | `DELETE /orders/{id}/shipment` |
 
-Creating an order returns `201` and a `Location` header. Putting a shipment returns `200` with the saved carrier and tracking number; repeating or replacing it records no extra `order-shipped` event. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
+Creating an order returns `201` and a `Location` header. Putting a shipment returns `200` with the saved carrier and tracking number; repeating or replacing it records no extra `order-shipped` event. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
 
-[Field validation](ApiInput.cs) uses `Result.Ensure` to report the first failed rule for each field. The [shipment handler](ShipmentEndpoints.cs) uses `Validation.Zip` so a single `400` can report errors for both carrier and tracking. For single-row lookups, the [order](OrderEndpoints.cs) and shipment handlers use `Option` to distinguish a returned row from a missing resource; [`Match` maps those cases to `200` and `404`](ApiResults.cs).
+## How it uses Derail
+
+- [Field validation](ApiInput.cs) chains rules with `Result.Ensure`, so each field reports its first failed rule.
+- `Validation.Zip` combines independent fields, so one `400` lists every invalid field.
+- Single-row reads return an `Option`; [`Match`](ApiResults.cs) turns it into `200` or `404`.
+- Shipment changes are [`AsyncReaderResult` steps](ShipmentEndpoints.cs) sharing one connection: `Lock` reads the order `FOR UPDATE`, `Ensure` applies the delivery rule, and `Bind` runs the write. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success.
+- A `ShipmentError` says why a step failed, and one `switch` maps it to `404` or `409`.
 
 ## Try it
 

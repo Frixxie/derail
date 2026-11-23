@@ -79,7 +79,36 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal(0L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = 500"));
     }
 
+    [Fact]
+    public async Task Delivered_shipment_cannot_be_changed_or_removed()
+    {
+        await api.Execute("INSERT INTO orders (id, description, carrier, tracking) VALUES (700, 'Sample', 'Parcel', 'SYN-001')");
+        var token = TestContext.Current.CancellationToken;
+
+        var delivered = await api.Client.PutAsync("/orders/700/shipment/delivery", null, token);
+        var changed = await api.Ship(700, new { carrier = "Parcel", tracking = "SYN-002" });
+        var removed = await api.Client.DeleteAsync("/orders/700/shipment", token);
+
+        Assert.Equal(HttpStatusCode.NoContent, delivered.StatusCode);
+        Assert.Equal("shipment-delivered", (await Problem(changed, HttpStatusCode.Conflict)).GetProperty("code").GetString());
+        Assert.Equal("shipment-delivered", (await Problem(removed, HttpStatusCode.Conflict)).GetProperty("code").GetString());
+        Assert.Equal(new DeliveredBody("Parcel", "SYN-001", true),
+            await api.Client.GetFromJsonAsync<DeliveredBody>("/orders/700/shipment", token));
+    }
+
+    [Fact]
+    public async Task Delivery_requires_a_shipment()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (710, 'Sample')");
+
+        var response = await api.Client.PutAsync("/orders/710/shipment/delivery", null, TestContext.Current.CancellationToken);
+
+        var problem = await Problem(response, HttpStatusCode.NotFound);
+        Assert.Equal("shipment-not-found", problem.GetProperty("code").GetString());
+    }
+
     private sealed record ShipmentBody(string Carrier, string Tracking);
+    private sealed record DeliveredBody(string Carrier, string Tracking, bool Delivered);
 
     private static async Task<JsonElement> Problem(HttpResponseMessage response, HttpStatusCode status)
     {

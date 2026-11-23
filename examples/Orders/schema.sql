@@ -3,7 +3,9 @@ CREATE TABLE orders (
     description text NOT NULL,
     carrier text,
     tracking text,
-    CHECK ((carrier IS NULL) = (tracking IS NULL))
+    delivered boolean NOT NULL DEFAULT false,
+    CHECK ((carrier IS NULL) = (tracking IS NULL)),
+    CHECK (carrier IS NOT NULL OR NOT delivered)
 );
 
 CREATE TABLE order_events (
