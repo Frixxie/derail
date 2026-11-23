@@ -6,6 +6,8 @@
   combinators that inspect it throw `SwitchExpressionException`. Use `Option.None` for absence.
   The NuGet package includes analyzer error `DRL001` for explicit `default` and
   parameterless construction of an option.
+  This reverses the 0.7.0 behavior on purpose: an option you forgot to initialize now fails
+  loudly instead of silently meaning absent, as `default` already does for `Result` and `Validation`.
 
 - `Validation.Sequence` collects errors directly from their non-empty storage,
   avoiding one enumerator allocation per invalid input while preserving error order.
