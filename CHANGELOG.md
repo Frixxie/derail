@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `AsyncReaderResult<TEnv, T, TError>` for lazy, cancellable workflows
+  with explicit dependencies, typed errors, and lifts from `Result` and `ReaderResult`.
+
 - Added `Option.Sequence`, `Option.Traverse`, `Result.Sequence`, `Result.Traverse`,
   and `Validation.Traverse` for ordered, single-pass collection processing.
 

@@ -10,6 +10,7 @@ Railway-oriented programming for C#, built on the native `union` types in C# 15 
 - **`NonEmpty<T>`** — an immutable ordered collection with a required first element.
 - **`Writer<T, TEvent>`** — a value paired with ordered events, without emitting them.
 - **`Reader<TEnv, T>` / `ReaderResult<TEnv, T, TError>`** — reusable computations with explicit dependencies.
+- **`AsyncReaderResult<TEnv, T, TError>`** — a reusable async workflow that receives its dependencies and cancellation token at execution.
 
 Option, Result, and Validation use real union members, giving you exhaustive `switch` expressions and implicit conversions from each case for free.
 
@@ -87,7 +88,7 @@ These rules apply to `default` and to elements of newly allocated arrays:
 | `Option<T>` | `None` | Matches the `None` pattern, compares equal to an explicit `None`, and takes the absent branch of `Match`. |
 | `Result<T, TError>` | Uninitialized; neither `Ok` nor `Error` | `IsOk` and `IsError` are both false. Initialize with `Result.Ok` or `Result.Error` before use. |
 | `Validation<T, TError>` | Uninitialized; neither `Valid` nor `Invalid` | `IsValid` and `IsInvalid` are both false. Initialize with `Validation.Valid` or `Validation.Invalid` before use. |
-| `NonEmpty`, `Reader`, `ReaderResult`, `Writer` | `null` reference | No instance exists. Construct one before calling its members. |
+| `NonEmpty`, `Reader`, `ReaderResult`, `AsyncReaderResult`, `Writer` | `null` reference | No instance exists. Construct one before calling its members. |
 
 An uninitialized result or validation is a programming error, not a domain error.
 Combinators such as `Match`, `Map`, and `GetValueOrDefault` throw
@@ -110,7 +111,7 @@ uninitialized element even after an `Invalid`.
   or materialize its event history. To compare outcomes, compare `Value` and
   use `left.Events.SequenceEqual(right.Events)`; reading `Events` can allocate
   the flattened event list on first access.
-- `Reader` and `ReaderResult` also use reference equality. Equality never runs
+- `Reader`, `ReaderResult`, and `AsyncReaderResult` also use reference equality. Equality never runs
   a computation. To compare outcomes for a particular environment, run both
   readers with that environment and compare their results.
 
@@ -336,6 +337,31 @@ pair a value with events, and require a head element respectively. Their constru
 immutable collection storage protect these invariants; none needs alternative union cases.
 
 ### Async
+
+#### Asynchronous ReaderResult
+
+Build an `AsyncReaderResult` once and run it with the environment and token for
+each request. For example, with an open database connection:
+
+```csharp
+var lookup = OrderLookup.Status(orderId); // No query yet.
+Result<string, LookupError> status = await lookup.Run(connection, cancellationToken);
+```
+
+[`OrderLookup.cs`](tests/PackageConsumer/OrderLookup.cs) validates the ID before
+issuing a parameterized query. A missing row returns `NotFound`; database exceptions
+and cancellation propagate to the caller. `Recover` handles only typed errors.
+`Bind`, `Recover`, and sequential `Zip` share the environment and token. `Local`
+adapts a larger environment; `Map`, `MapError`, `Ensure`, and LINQ compose without
+executing. Lift existing values with `FromResult` and computations with `FromReaderResult`.
+
+`Run` returns `Task<Result<T, TError>>`, matching common I/O APIs such as
+`ExecuteScalarAsync`. `ValueTask` can save allocations for frequently synchronous
+operations, but has single-consumption constraints; there is one `Task`-based
+workflow API. A pre-canceled token prevents execution. Once I/O starts, cancellation
+is cooperative: forward the supplied token to the underlying operation.
+
+#### Async combinators on Option and Result
 
 `MapAsync` and `BindAsync` accept functions returning `Task` or `ValueTask`. The same combinators work directly on a `Result` or `Option` wrapped in either type:
 

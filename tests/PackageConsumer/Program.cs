@@ -24,5 +24,11 @@ Task<Result<int, int>> recovered = Result.Error<int, string>("missing").RecoverA
     (await alternative).ToResult(() => 404));
 Task<Result<int, int>> observed = (await recovered).TapErrorAsync(async _ => await Task.Yield());
 
+var workflow = from fee in AsyncReaderResult.Ask<int, string>()
+               from count in AsyncReaderResult.FromResult<int, int, string>(quantity)
+               select count + fee;
+if (!(await workflow.Run(2)).Equals(Result.Ok<int, string>(5)))
+    throw new InvalidOperationException("Unexpected result from the packaged async reader.");
+
 if ((await discounted).GetValueOrDefault(-1) != 14 || quote.Run(2) != 16 || (await observed).GetValueOrDefault(-1) != 4)
     throw new InvalidOperationException("Unexpected result from the packaged API.");

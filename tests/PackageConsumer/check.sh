@@ -14,7 +14,7 @@ mkdir "$work/feed"
 cp "$1" "$work/feed/"
 
 fixture=$(dirname "$0")
-cp "$fixture/PackageConsumer.csproj" "$fixture/Program.cs" "$work/"
+cp "$fixture/PackageConsumer.csproj" "$fixture/"*.cs "$work/"
 project="$work/PackageConsumer.csproj"
 cat > "$work/NuGet.Config" <<'XML'
 <configuration>
