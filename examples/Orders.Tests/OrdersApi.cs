@@ -16,7 +16,7 @@ public sealed class OrdersApi : IAsyncLifetime
     private HttpClient? _client;
     private NpgsqlDataSource? _db;
 
-    private HttpClient Client => _client ?? throw new InvalidOperationException("The API has not started.");
+    public HttpClient Client => _client ?? throw new InvalidOperationException("The API has not started.");
     private NpgsqlDataSource Db => _db ?? throw new InvalidOperationException("The database has not started.");
 
     public async ValueTask InitializeAsync()

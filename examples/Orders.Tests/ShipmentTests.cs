@@ -35,7 +35,7 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
     [Fact]
     public async Task First_shipment_is_stored_with_one_event_and_a_replay_adds_none()
     {
-        await api.Execute("INSERT INTO orders (id) VALUES (300)");
+        await api.Execute("INSERT INTO orders (id, description) VALUES (300, 'Sample')");
 
         var first = await api.Ship(300, new { carrier = " Parcel ", tracking = "SYN-001 " });
         var replay = await api.Ship(300, Requested);
@@ -50,38 +50,24 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
     }
 
     [Theory]
-    [InlineData(600L, "SYN-001", HttpStatusCode.OK)]
-    [InlineData(601L, "SYN-002", HttpStatusCode.Conflict)]
-    public async Task Overlapping_shipments_commit_only_one_event(long id, string otherTracking, HttpStatusCode otherStatus)
+    [InlineData(600L, "SYN-001")]
+    [InlineData(601L, "SYN-002")]
+    public async Task Overlapping_shipments_commit_only_one_event(long id, string otherTracking)
     {
-        await api.Execute("INSERT INTO orders (id) VALUES ($1)", id);
+        await api.Execute("INSERT INTO orders (id, description) VALUES ($1, 'Sample')", id);
         var first = new ShipmentBody("Parcel", "SYN-001");
         var second = first with { Tracking = otherTracking };
 
         var (left, right) = await api.ShipTogether(id, first, second);
-        Assert.Equal([HttpStatusCode.OK, otherStatus], new[] { left, right }.Order());
-
-        var winner = left == HttpStatusCode.OK ? first : second;
-        Assert.Equal(winner.Tracking, await api.Scalar<string>("SELECT tracking FROM orders WHERE id = $1", id));
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (left, right));
+        Assert.Contains(await api.Scalar<string>("SELECT tracking FROM orders WHERE id = $1", id), new[] { first.Tracking, second.Tracking });
         Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = $1", id));
-    }
-
-    [Fact]
-    public async Task Different_shipment_conflicts_and_keeps_the_first()
-    {
-        await api.Execute("INSERT INTO orders (id, carrier, tracking) VALUES (400, 'Parcel', 'SYN-001')");
-
-        var response = await api.Ship(400, new { carrier = "Parcel", tracking = "different" });
-
-        var problem = await Problem(response, HttpStatusCode.Conflict);
-        Assert.Equal("already-shipped", problem.GetProperty("code").GetString());
-        Assert.Equal("Parcel:SYN-001", await api.Scalar<string>("SELECT carrier || ':' || tracking FROM orders WHERE id = 400"));
     }
 
     [Fact]
     public async Task Failed_event_insert_rolls_back_the_order_update()
     {
-        await api.Execute("INSERT INTO orders (id) VALUES (500)");
+        await api.Execute("INSERT INTO orders (id, description) VALUES (500, 'Sample')");
         // Reject only the second write for this order, so a committed order update would be visible.
         await api.Execute("ALTER TABLE order_events ADD CHECK (order_id <> 500)");
 

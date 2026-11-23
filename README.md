@@ -587,8 +587,8 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 
 ## Build, test and benchmark
 
-The [order shipment API](examples/Orders/README.md) shows how the primitives work
-together in one request: validate a shipment, save it with DbReader, and map the result to HTTP.
+The [orders and shipments API](examples/Orders/README.md) shows CRUD with DbReader,
+using `Validation` for request fields and `Option` for a missing order.
 
 ```sh
 dotnet build

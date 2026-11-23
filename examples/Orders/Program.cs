@@ -1,4 +1,3 @@
-using Derail;
 using Npgsql;
 using Orders;
 
@@ -9,26 +8,14 @@ builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddProblemDetails();
 var app = builder.Build();
 app.UseExceptionHandler();
-app.MapPut("/orders/{id:long}/shipment", Ship);
+var orders = app.MapGroup("/orders");
+orders.MapPost("", OrderEndpoints.Create);
+orders.MapGet("", OrderEndpoints.List);
+orders.MapGet("/{id:long}", OrderEndpoints.Get);
+orders.MapPut("/{id:long}", OrderEndpoints.Update);
+orders.MapDelete("/{id:long}", OrderEndpoints.Delete);
+var shipments = orders.MapGroup("/{id:long}/shipment");
+shipments.MapPut("", ShipmentEndpoints.Put);
+shipments.MapGet("", ShipmentEndpoints.Get);
+shipments.MapDelete("", ShipmentEndpoints.Delete);
 app.Run();
-
-static async Task<IResult> Ship(long id, ShipmentRequest request, NpgsqlDataSource db, CancellationToken token)
-{
-    switch (Shipping.Validate(request))
-    {
-        case Invalid<FieldError>(var errors):
-            return Results.ValidationProblem(errors.GroupBy(e => e.Field)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.Code).ToArray()));
-        case Valid<Shipment>(var shipment):
-            var result = await OrderStore.Ship(db, id, shipment, token);
-            return result.Match(value => Results.Ok(value), error => error switch
-            {
-                OrderNotFound => Problem(404, "order-not-found"),
-                AlreadyShipped => Problem(409, "already-shipped"),
-            });
-        default: throw new InvalidOperationException("Uninitialized validation");
-    }
-}
-
-static IResult Problem(int status, string code) => Results.Problem(statusCode: status,
-    extensions: new Dictionary<string, object?> { ["code"] = code });
