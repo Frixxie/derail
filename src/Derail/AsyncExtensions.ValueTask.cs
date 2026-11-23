@@ -7,6 +7,29 @@ public static partial class AsyncExtensions
     // On a synchronous receiver, keep Task as the default for untyped async lambdas.
     extension<T, TError>(Result<T, TError> result)
     {
+        /// <summary>Runs a ValueTask-returning replacement only on error.</summary>
+        [OverloadResolutionPriority(-1)]
+        public ValueTask<Result<T, TNewError>> RecoverAsync<TNewError>(Func<TError, ValueTask<Result<T, TNewError>>> recover) =>
+            result switch
+            {
+                Ok<T> ok => ValueTask.FromResult<Result<T, TNewError>>(ok),
+                Error<TError>(var error) => recover(error),
+            };
+
+        /// <summary>Awaits an observation only on error and returns the original result.</summary>
+        [OverloadResolutionPriority(-1)]
+        public async ValueTask<Result<T, TError>> TapErrorAsync(Func<TError, ValueTask> action)
+        {
+            switch (result)
+            {
+                case Ok<T>: return result;
+                case Error<TError>(var error):
+                    await action(error).ConfigureAwait(false);
+                    return result;
+                default: throw new SwitchExpressionException(result);
+            }
+        }
+
         /// <summary>Transforms the success value with a ValueTask-returning function.</summary>
         [OverloadResolutionPriority(-1)]
         public async ValueTask<Result<TResult, TError>> MapAsync<TResult>(Func<T, ValueTask<TResult>> map) =>
@@ -53,6 +76,22 @@ public static partial class AsyncExtensions
 
     extension<T, TError>(ValueTask<Result<T, TError>> task)
     {
+        /// <summary>Replaces a typed error after awaiting the result.</summary>
+        public async ValueTask<Result<T, TNewError>> Recover<TNewError>(Func<TError, Result<T, TNewError>> recover) =>
+            (await task.ConfigureAwait(false)).Recover(recover);
+
+        /// <summary>Awaits a replacement computation only on error.</summary>
+        public async ValueTask<Result<T, TNewError>> RecoverAsync<TNewError>(Func<TError, ValueTask<Result<T, TNewError>>> recover) =>
+            await (await task.ConfigureAwait(false)).RecoverAsync(recover).ConfigureAwait(false);
+
+        /// <summary>Observes a typed error after awaiting the result.</summary>
+        public async ValueTask<Result<T, TError>> TapError(Action<TError> action) =>
+            (await task.ConfigureAwait(false)).TapError(action);
+
+        /// <summary>Awaits an observation only on error and preserves the result.</summary>
+        public async ValueTask<Result<T, TError>> TapErrorAsync(Func<TError, ValueTask> action) =>
+            await (await task.ConfigureAwait(false)).TapErrorAsync(action).ConfigureAwait(false);
+
         /// <summary>Transforms the success value.</summary>
         public async ValueTask<Result<TResult, TError>> Map<TResult>(Func<T, TResult> map) =>
             (await task.ConfigureAwait(false)).Map(map);
@@ -88,6 +127,11 @@ public static partial class AsyncExtensions
 
     extension<T>(Option<T> option)
     {
+        /// <summary>Runs a ValueTask-returning fallback only when absent.</summary>
+        [OverloadResolutionPriority(-1)]
+        public ValueTask<Option<T>> OrElseAsync(Func<ValueTask<Option<T>>> fallback) =>
+            option.IsSome ? ValueTask.FromResult(option) : fallback();
+
         /// <summary>Transforms the value with a ValueTask-returning function when present.</summary>
         [OverloadResolutionPriority(-1)]
         public async ValueTask<Option<TResult>> MapAsync<TResult>(Func<T, ValueTask<TResult>> map) =>
@@ -105,6 +149,14 @@ public static partial class AsyncExtensions
 
     extension<T>(ValueTask<Option<T>> task)
     {
+        /// <summary>Replaces an absent value after awaiting the option.</summary>
+        public async ValueTask<Option<T>> OrElse(Func<Option<T>> fallback) =>
+            (await task.ConfigureAwait(false)).OrElse(fallback);
+
+        /// <summary>Awaits a fallback only when the option is absent.</summary>
+        public async ValueTask<Option<T>> OrElseAsync(Func<ValueTask<Option<T>>> fallback) =>
+            await (await task.ConfigureAwait(false)).OrElseAsync(fallback).ConfigureAwait(false);
+
         /// <summary>Transforms the value when present.</summary>
         public async ValueTask<Option<TResult>> Map<TResult>(Func<T, TResult> map) =>
             (await task.ConfigureAwait(false)).Map(map);

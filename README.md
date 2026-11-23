@@ -360,6 +360,27 @@ ValueTask<Result<decimal, TransferError>> balance = FindCachedAsync(number)
 
 `EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error.
 
+### Recovery and fallback
+
+Use `OrElse` when the fallback also returns an option. A cache hit (including
+`Some(null)`) skips the fallback entirely. Use `TapError` to observe a failure
+without replacing it, and `Recover` when the next step can succeed or return a
+different error type. For example:
+
+```csharp
+Task<Result<Account, LookupError>> FindWithBackup(AccountNumber number) =>
+    FindInCache(number)                          // Option<Account>
+        .OrElseAsync(() => FindAccountAsync(number))
+        .ToResult(() => number)                  // missing account number
+        .TapError(missing => RecordCacheAndDatabaseMiss(missing))
+        .RecoverAsync(missing => FindInBackupAsync(missing));
+```
+
+Use `TapErrorAsync` for an observer that must be awaited. Recovery handles typed
+errors and absence; it does not catch exceptions or cancellation.
+
+### Async execution policy
+
 Derail uses `ConfigureAwait(false)` for its own `Task` and `ValueTask` awaits.
 Callbacks can run inline when an input is already complete; after a pending input,
 do not assume the callback runs on your UI thread. Your own `await` controls where
@@ -374,13 +395,14 @@ underlying async call inside the callback.
 | | `Option<T>` | `Result<T, TError>` | `Validation<T, TError>` |
 | --- | --- | --- | --- |
 | Create | `Option.Some`, `Option.None`, `Option.FromNullable` | `Result.Ok`, `Result.Error` | `Validation.Valid`, `Validation.Invalid` |
-| Inspect | `IsSome`, `IsNone` | `IsOk`, `IsError`, `Tap` | `IsValid`, `IsInvalid` |
+| Inspect | `IsSome`, `IsNone` | `IsOk`, `IsError`, `Tap`, `TapError` | `IsValid`, `IsInvalid` |
 | Transform | `Map`, `Where` | `Map`, `MapError` | `Map`, `MapErrors` |
 | Chain | `Bind`, LINQ | `Bind`, `Ensure`, LINQ | — (use `ToResult`) |
+| Recover | `OrElse` | `Recover` | — |
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply`, `Sequence` (all errors) |
 | Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
-| Async (`Task` or `ValueTask`) | `MapAsync`, `BindAsync`, wrapped `Option<T>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, wrapped `Result<T, TError>` extensions | — |
+| Async (`Task` or `ValueTask`) | `MapAsync`, `BindAsync`, `OrElseAsync`, wrapped `Option<T>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, `RecoverAsync`, `TapErrorAsync`, wrapped `Result<T, TError>` extensions | — |
 
 ## Build, test and benchmark
 

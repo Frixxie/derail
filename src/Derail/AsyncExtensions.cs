@@ -10,6 +10,27 @@ public static partial class AsyncExtensions
 {
     extension<T, TError>(Result<T, TError> result)
     {
+        /// <summary>Runs an asynchronous replacement only on error.</summary>
+        public Task<Result<T, TNewError>> RecoverAsync<TNewError>(Func<TError, Task<Result<T, TNewError>>> recover) =>
+            result switch
+            {
+                Ok<T> ok => Task.FromResult<Result<T, TNewError>>(ok),
+                Error<TError>(var error) => recover(error),
+            };
+
+        /// <summary>Awaits an observation only on error and returns the original result.</summary>
+        public async Task<Result<T, TError>> TapErrorAsync(Func<TError, Task> action)
+        {
+            switch (result)
+            {
+                case Ok<T>: return result;
+                case Error<TError>(var error):
+                    await action(error).ConfigureAwait(false);
+                    return result;
+                default: throw new System.Runtime.CompilerServices.SwitchExpressionException(result);
+            }
+        }
+
         /// <summary>Transforms the success value with an async function.</summary>
         public async Task<Result<TResult, TError>> MapAsync<TResult>(Func<T, Task<TResult>> map) =>
             result switch
@@ -48,6 +69,22 @@ public static partial class AsyncExtensions
 
     extension<T, TError>(Task<Result<T, TError>> task)
     {
+        /// <summary>Replaces a typed error after awaiting the result.</summary>
+        public async Task<Result<T, TNewError>> Recover<TNewError>(Func<TError, Result<T, TNewError>> recover) =>
+            (await task.ConfigureAwait(false)).Recover(recover);
+
+        /// <summary>Awaits a replacement computation only on error.</summary>
+        public async Task<Result<T, TNewError>> RecoverAsync<TNewError>(Func<TError, Task<Result<T, TNewError>>> recover) =>
+            await (await task.ConfigureAwait(false)).RecoverAsync(recover).ConfigureAwait(false);
+
+        /// <summary>Observes a typed error after awaiting the result.</summary>
+        public async Task<Result<T, TError>> TapError(Action<TError> action) =>
+            (await task.ConfigureAwait(false)).TapError(action);
+
+        /// <summary>Awaits an observation only on error and preserves the result.</summary>
+        public async Task<Result<T, TError>> TapErrorAsync(Func<TError, Task> action) =>
+            await (await task.ConfigureAwait(false)).TapErrorAsync(action).ConfigureAwait(false);
+
         /// <summary>Transforms the success value.</summary>
         public async Task<Result<TResult, TError>> Map<TResult>(Func<T, TResult> map) =>
             (await task.ConfigureAwait(false)).Map(map);
@@ -83,6 +120,10 @@ public static partial class AsyncExtensions
 
     extension<T>(Option<T> option)
     {
+        /// <summary>Runs an asynchronous fallback only when absent.</summary>
+        public Task<Option<T>> OrElseAsync(Func<Task<Option<T>>> fallback) =>
+            option.IsSome ? Task.FromResult(option) : fallback();
+
         /// <summary>Transforms the value with an async function when present.</summary>
         public async Task<Option<TResult>> MapAsync<TResult>(Func<T, Task<TResult>> map) =>
             option is Some<T>(var value) ? Option.Some(await map(value).ConfigureAwait(false)) : Option.None;
@@ -94,6 +135,14 @@ public static partial class AsyncExtensions
 
     extension<T>(Task<Option<T>> task)
     {
+        /// <summary>Replaces an absent value after awaiting the option.</summary>
+        public async Task<Option<T>> OrElse(Func<Option<T>> fallback) =>
+            (await task.ConfigureAwait(false)).OrElse(fallback);
+
+        /// <summary>Awaits a fallback only when the option is absent.</summary>
+        public async Task<Option<T>> OrElseAsync(Func<Task<Option<T>>> fallback) =>
+            await (await task.ConfigureAwait(false)).OrElseAsync(fallback).ConfigureAwait(false);
+
         /// <summary>Transforms the value when present.</summary>
         public async Task<Option<TResult>> Map<TResult>(Func<T, TResult> map) =>
             (await task.ConfigureAwait(false)).Map(map);

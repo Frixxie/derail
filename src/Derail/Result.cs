@@ -60,6 +60,23 @@ public static class ResultExtensions
         public Result<TResult, TError> Bind<TResult>(Func<T, Result<TResult, TError>> bind) =>
             result.Match(bind, Result.Error<TResult, TError>);
 
+        /// <summary>Runs a replacement computation on error, possibly changing the error type. Preserves success.</summary>
+        public Result<T, TNewError> Recover<TNewError>(Func<TError, Result<T, TNewError>> recover) =>
+            result.Match(Result.Ok<T, TNewError>, recover);
+
+        /// <summary>Observes the error, if present, and returns the original result.</summary>
+        public Result<T, TError> TapError(Action<TError> action)
+        {
+            switch (result)
+            {
+                case Ok<T>: return result;
+                case Error<TError>(var error):
+                    action(error);
+                    return result;
+                default: throw new System.Runtime.CompilerServices.SwitchExpressionException(result);
+            }
+        }
+
         /// <summary>Runs a synchronous action on success and returns the original result.</summary>
         public Result<T, TError> Tap(Action<T> action)
         {

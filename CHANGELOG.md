@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `Result.Recover`, `Result.TapError`, and `Option.OrElse` for handling typed
+  errors and missing values, with `Task` and `ValueTask` pipeline support.
+
 - **Behavior change:** `NonEmpty<T>` now compares and hashes by ordered elements.
   Distinct collections with equal elements represent the same dictionary or set
   key. For identity comparisons use `ReferenceEquals`; for identity-based keys
