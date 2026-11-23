@@ -10,7 +10,7 @@ public sealed class OptionInitializationAnalyzer : DiagnosticAnalyzer
 {
     private static readonly DiagnosticDescriptor Rule = new(
         "DRL001", "Initialize Option with a case",
-        "Initialize '{0}' with Option.Some(value) or Option.None",
+        "'{0}' is uninitialized. {1}.",
         "Correctness", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
@@ -30,7 +30,12 @@ public sealed class OptionInitializationAnalyzer : DiagnosticAnalyzer
                 if (operation.IsImplicit || !SymbolEqualityComparer.Default.Equals(operation.Type?.OriginalDefinition, option)) return;
                 if (operation is IObjectCreationOperation { Arguments.Length: > 0 }) return;
 
-                ctx.ReportDiagnostic(Diagnostic.Create(Rule, operation.Syntax.GetLocation(), operation.Type));
+                var parent = operation.Parent;
+                while (parent is IConversionOperation) parent = parent.Parent;
+                var guidance = parent is IParameterInitializerOperation
+                    ? "Remove the parameter default and add an overload that passes Option.None"
+                    : "Initialize it with Option.Some(value) or Option.None";
+                ctx.ReportDiagnostic(Diagnostic.Create(Rule, operation.Syntax.GetLocation(), operation.Type, guidance));
             }, OperationKind.DefaultValue, OperationKind.ObjectCreation);
         });
     }

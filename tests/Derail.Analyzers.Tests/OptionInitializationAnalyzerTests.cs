@@ -15,7 +15,6 @@ public class OptionInitializationAnalyzerTests
     [InlineData("static Option<int> TargetTypedDefault() => [|default|];")]
     [InlineData("static Option<int> Parameterless() => [|new Option<int>()|];")]
     [InlineData("static Option<int> TargetTypedNew() => [|new()|];")]
-    [InlineData("static void OptionalParameter(Option<int> value = [|default|]) { }")]
     [InlineData("static Option<string>[] Several() => [[|default|], Option.None, [|new()|]];")]
     public async Task Explicitly_uninitialized_options_are_errors(string member)
     {
@@ -28,6 +27,21 @@ public class OptionInitializationAnalyzerTests
     }
 
     [Theory]
+    [InlineData("default")]
+    [InlineData("default(Option<int>)")]
+    [InlineData("new Option<int>()")]
+    public async Task Optional_parameter_diagnostic_recommends_an_overload(string initializer)
+    {
+        var (source, expected) = Unmark($"static void M(Option<int> value = [|{initializer}|]) {{ }}");
+        var diagnostic = Assert.Single((await Diagnose(source)).Where(d => d.Severity == DiagnosticSeverity.Error));
+
+        Assert.Equal("DRL001", diagnostic.Id);
+        Assert.Equal(Assert.Single(expected), diagnostic.Location.SourceSpan);
+        Assert.Contains("overload that passes Option.None", diagnostic.GetMessage());
+    }
+
+    [Theory]
+    [InlineData("static void M() => M(Option.None); static void M(Option<int> value) { }")]
     [InlineData("static Option<int>[] Cases() => [Option.Some(42), Option.None, new(new Some<int>(1)), new(new None())];")]
     [InlineData("static Option<int>? NoNullableValue() => default;")]
     [InlineData("static Option<int>[] ArrayStorage() => new Option<int>[2];")]
