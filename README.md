@@ -43,13 +43,13 @@ The examples below come from [`BankingExamples.cs`](tests/Derail.Tests/BankingEx
 
 ```csharp
 Option<Account> FindAccount(AccountNumber number) =>
-    ledger.TryGetValue(number, out var account) ? Option.Some(account) : Option.None;
+    ledger.TryGetValue(number, out Account? account) ? Option.Some(account) : Option.None;
 
-var displayName = Option.FromNullable(account.Nickname).GetValueOrDefault(account.Number.Value);
+string displayName = Option.FromNullable(account.Nickname).GetValueOrDefault(account.Number.Value);
 
-var premium = FindAccount(number).Where(a => a.Balance >= 500m);
+Option<Account> premium = FindAccount(number).Where(a => a.Balance >= 500m);
 
-var total = FindAccount(savings).Zip(FindAccount(checking), (a, b) => a.Balance + b.Balance);
+Option<decimal> total = FindAccount(savings).Zip(FindAccount(checking), (a, b) => a.Balance + b.Balance);
 ```
 
 ### Result: pipelines that stop at the first failure
@@ -74,7 +74,7 @@ This pipeline logs a completed withdrawal and returns the new balance. A frozen 
 
 ```csharp
 TextWriter log = Console.Out;
-var balance = ParseAccountNumber(input)
+Result<decimal, TransferError> balance = ParseAccountNumber(input)
     .Bind(GetAccount)
     .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
     .Bind(a => Withdraw(a, 100m))
@@ -98,7 +98,7 @@ Result<Receipt, TransferError> Transfer(string fromInput, string toInput, decima
 Handle the outcome with pattern matching, or translate errors at the boundary:
 
 ```csharp
-var message = Transfer(from, to, 200m) switch
+string message = Transfer(from, to, 200m) switch
 {
     Ok<Receipt>(var r) => $"Moved {r.Amount:0.00} from {r.From} to {r.To}",
     Error<TransferError>(TransferError.InsufficientFunds(var n, var balance, var requested)) =>
@@ -106,7 +106,7 @@ var message = Transfer(from, to, 200m) switch
     // ...
 };
 
-var status = Transfer(from, to, amount)
+int status = Transfer(from, to, amount)
     .MapError(error => error switch
     {
         TransferError.AccountNotFound => 404,
@@ -132,12 +132,12 @@ ValidateApplication("", "12", 10m);
 `Validation.Sequence` checks a whole batch, and `ToResult()` hands a validated value back to a `Result` pipeline:
 
 ```csharp
-var numbers = Validation.Sequence(batch.Select(ValidateNumber));
+Validation<IReadOnlyList<AccountNumber>, string> numbers = Validation.Sequence(batch.Select(ValidateNumber));
 
 Result<AccountApplication, NonEmpty<string>> application =
     ValidateApplication("", "12", 500m).ToResult();
 
-var message = application
+string message = application
     .Map(a => $"Welcome, {a.Owner}")
     .Match(ok => ok, errors => string.Join("; ", errors));
 // "Owner is required; '12' is not an account number"
@@ -146,7 +146,7 @@ var message = application
 Failures always have a first error, so an error summary needs no empty-list fallback:
 
 ```csharp
-var summary = ValidateApplication("", "12", 10m).Match(
+string summary = ValidateApplication("", "12", 10m).Match(
     _ => "Application accepted",
     errors => $"{errors.Head} ({errors.Tail.Count} more problems)");
 // "Owner is required (2 more problems)"
@@ -171,13 +171,13 @@ sealed record Payment(AccountNumber To, decimal Amount);
 Result<NonEmpty<Payment>, string> RequirePayments(IEnumerable<Payment> payments) =>
     NonEmpty.FromEnumerable(payments).ToResult(() => "At least one payment is required");
 
-var batch = RequirePayments([
+Result<NonEmpty<Payment>, string> batch = RequirePayments([
     new Payment(Checking.Number, 200m),
     new Payment(Seized.Number, 50m),
 ]);
 
-var total = batch.Map(payments => payments.Map(payment => payment.Amount).Sum()); // Ok(250m)
-var empty = RequirePayments([]); // Error("At least one payment is required")
+Result<decimal, string> total = batch.Map(payments => payments.Map(payment => payment.Amount).Sum()); // Ok(250m)
+Result<NonEmpty<Payment>, string> empty = RequirePayments([]); // Error("At least one payment is required")
 ```
 
 `NonEmpty<T>` implements `IReadOnlyList<T>` with `Head`, `Tail`, and `Count`.
@@ -191,7 +191,7 @@ Non-emptiness alone does not validate payment amounts or destination accounts.
 ```csharp
 sealed record TransferRecorded(AccountNumber From, AccountNumber To, decimal Amount);
 
-var result = Transfer("1234.56.78901", "1098.76.54321", 200m)
+Result<Writer<Receipt, TransferRecorded>, TransferError> result = Transfer("1234.56.78901", "1098.76.54321", 200m)
     .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
         [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)]));
 
@@ -212,9 +212,9 @@ Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
     Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
         .Map(ledger => ledger.Values.Sum(account => account.Balance));
 
-var report = TotalBalance();
-var total = report.Run(Ledger); // 6050m
-var checkingOnly = report.Run(new Dictionary<AccountNumber, Account>
+Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> report = TotalBalance();
+decimal total = report.Run(Ledger); // 6050m
+decimal checkingOnly = report.Run(new Dictionary<AccountNumber, Account>
 {
     [Checking.Number] = Checking,
 }); // 50m
@@ -234,8 +234,9 @@ ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, Transf
         .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
             [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
 
-var workflow = AuditedTransfer("1234.56.78901", "1098.76.54321", 200m);
-var result = workflow.Run(Ledger); // Ok: receipt (800m, 250m) and its audit event
+ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError> workflow =
+    AuditedTransfer("1234.56.78901", "1098.76.54321", 200m);
+Result<Writer<Receipt, TransferRecorded>, TransferError> result = workflow.Run(Ledger); // Ok: receipt and audit event
 ```
 
 It supports `Map`, `MapError`, `Bind`, `Recover`, `Zip`, `Local`, and LINQ.

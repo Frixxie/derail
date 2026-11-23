@@ -17,10 +17,10 @@ public class PrimitiveExamples
     [Fact]
     public void Quote_UsesExplicitConfigurationAndReturnsEventsWithoutPublishingThem()
     {
-        var workflow = Quote(3);
-        var result = workflow.Run(new Pricing(10m, 5));
+        ReaderResult<Pricing, Writer<decimal, Quoted>, string> workflow = Quote(3);
+        Result<Writer<decimal, Quoted>, string> result = workflow.Run(new Pricing(10m, 5));
 
-        var quote = result.Match(value => value, error => throw new InvalidOperationException(error));
+        Writer<decimal, Quoted> quote = result.Match(value => value, error => throw new InvalidOperationException(error));
         quote.Value.Should().Be(30m);
         quote.Events.Should().Equal(new Quoted(3, 30m));
         workflow.Run(new Pricing(10m, 2)).IsError.Should().BeTrue();
@@ -29,7 +29,7 @@ public class PrimitiveExamples
     [Fact]
     public void NonEmpty_ModelsARequiredBatch()
     {
-        var batch = NonEmpty.FromEnumerable(new[] { 1, 2, 3 })
+        Result<NonEmpty<int>, string> batch = NonEmpty.FromEnumerable(new[] { 1, 2, 3 })
             .ToResult(() => "At least one item is required");
 
         batch.Map(items => items.Map(x => x * 2).Sum())
