@@ -23,6 +23,7 @@ jobs:
       - run: dotnet build -c Release -p:Version=$VERSION
       - run: dotnet test --project tests/Derail.Tests -c Release -p:Version=$VERSION
       - run: dotnet pack src/Derail -c Release --no-build -p:Version=$VERSION -o artifacts
+      - run: bash tests/PackageConsumer/check.sh artifacts/Derail.*.nupkg
       - name: NuGet login (OIDC → temporary API key)
         uses: NuGet/login@v1
         id: login

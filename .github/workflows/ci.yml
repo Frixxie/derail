@@ -16,6 +16,7 @@ jobs:
       - run: dotnet build -c Release
       - run: dotnet test --project tests/Derail.Tests -c Release --no-build
       - run: dotnet pack src/Derail -c Release --no-build -o artifacts
+      - run: bash tests/PackageConsumer/check.sh artifacts/Derail.*.nupkg
       - uses: actions/upload-artifact@v7
         with:
           name: packages

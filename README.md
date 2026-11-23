@@ -23,6 +23,22 @@ Option, Result, and Validation use real union members, giving you exhaustive `sw
 dotnet add package Derail
 ```
 
+## Compatibility and versioning
+
+Patch releases preserve the public API; minor releases add compatible functionality.
+Before 1.0, intentional breaks require a minor version bump; from 1.0 onward they
+require a major bump. A breaking-change PR must document the affected calls and
+their replacements in `CHANGELOG.md` and receive explicit maintainer approval
+before merge. If package validation needs an exception, suppress only the approved
+difference with a justification; do not skip validation or move the baseline to pass CI.
+
+`dotnet pack src/Derail -c Release -o artifacts` checks binary compatibility
+against the published baseline pinned in `Derail.csproj`. Advance that baseline
+to the latest stable package after each release. To check source compatibility,
+run `bash tests/PackageConsumer/check.sh artifacts/Derail.<version>.nupkg` with
+the file just packed. This compiles and runs representative consumer calls;
+when adding overloads, include inference-sensitive call sites in that fixture.
+
 ## Quick start: from input to outcome
 
 Paste this into `Program.cs` in a .NET 11 console app after adding Derail:
