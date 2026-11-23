@@ -2,7 +2,8 @@
 
 `PUT /orders/{id}/shipment` records a shipment for an existing order. The order update
 and its `order-shipped` event must commit together. This local example uses ASP.NET
-Core, explicit SQL, and Npgsql. The Derail NuGet package does not depend on them.
+Core, Npgsql, and [DbReader](https://github.com/seesharper/DbReader) for parameterized
+SQL and row mapping. These dependencies belong to the example, not the Derail package.
 
 ## Run the integration tests
 
@@ -47,6 +48,22 @@ Remove the database with `docker compose -f examples/Orders/compose.yaml down --
 | Order does not exist | `404` problem with `code: order-not-found` |
 | A different shipment already exists | `409` problem with `code: already-shipped` |
 | Database command fails | Generic `500` problem; transaction rolls back |
+
+## Look up shipment status
+
+`GET /orders/status?id=1&id=2` looks up several orders in one query. For example,
+after registering the shipment above, run `curl 'http://127.0.0.1:5080/orders/status?id=1'`:
+
+```json
+[{"id":1,"shipment":{"carrier":"Parcel","tracking":"SYN-001"}}]
+```
+
+An existing order awaiting shipment has `"shipment": null`. `NonEmpty.FromEnumerable`
+rejects an empty ID list before querying (`400`, `errors.id: ["required"]`). DbReader
+binds the distinct IDs to `IN (@Ids)`. `Result.Traverse` then walks the **requested**
+IDs, preserving order and repeats. If any order is missing, the endpoint returns a
+`404` problem with `code: order-not-found` and the first missing `orderId` instead of
+a partial list.
 
 ## Follow the workflow
 

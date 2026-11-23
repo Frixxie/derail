@@ -45,6 +45,9 @@ public sealed class OrdersApi : IAsyncLifetime
     public Task<HttpResponseMessage> Ship(long id, object payload) =>
         Client.PutAsJsonAsync($"/orders/{id}/shipment", payload, TestContext.Current.CancellationToken);
 
+    public Task<HttpResponseMessage> Lookup(params long[] ids) =>
+        Client.GetAsync("/orders/status?" + string.Join("&", ids.Select(id => $"id={id}")), TestContext.Current.CancellationToken);
+
     public async Task<(HttpStatusCode First, HttpStatusCode Second)> ShipTogether(long id, object first, object second)
     {
         var token = TestContext.Current.CancellationToken;

@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="DbReader" Version="4.2.1" />
     <PackageReference Include="Npgsql" Version="11.0.0" />
     <ProjectReference Include="../../src/Derail/Derail.csproj" />
   </ItemGroup>

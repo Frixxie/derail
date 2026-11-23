@@ -10,6 +10,39 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
 {
     private static readonly object Requested = new { carrier = "Parcel", tracking = "SYN-001" };
 
+    [Fact]
+    public async Task Lookup_returns_shipped_and_pending_orders_in_requested_order_including_repeats()
+    {
+        await api.Execute("INSERT INTO orders (id, carrier, tracking) VALUES (710, null, null), (711, 'Parcel', 'SYN-711')");
+
+        using var response = await api.Lookup(711, 710, 711);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var shipped = new StatusBody(711, new ShipmentBody("Parcel", "SYN-711"));
+        var statuses = await response.Content.ReadFromJsonAsync<StatusBody[]>(TestContext.Current.CancellationToken);
+        Assert.NotNull(statuses);
+        Assert.Equal([shipped, new StatusBody(710, null), shipped], statuses);
+    }
+
+    [Fact]
+    public async Task Lookup_reports_the_first_missing_id()
+    {
+        using var response = await api.Lookup(721, 720);
+        var problem = await Problem(response, HttpStatusCode.NotFound);
+        Assert.Equal("order-not-found", problem.GetProperty("code").GetString());
+        Assert.Equal(721, problem.GetProperty("orderId").GetInt64());
+    }
+
+    [Fact]
+    public async Task Lookup_requires_at_least_one_id()
+    {
+        using var response = await api.Lookup();
+        var problem = await Problem(response, HttpStatusCode.BadRequest);
+        Assert.Equal("required", problem.GetProperty("errors").GetProperty("id")[0].GetString());
+    }
+
+    private sealed record StatusBody(long Id, ShipmentBody? Shipment);
+
     [Theory]
     [InlineData(" ", "", "required", "required")]
     [InlineData("Par\0cel", "SYN-\0", "invalid-character", "invalid-character")]

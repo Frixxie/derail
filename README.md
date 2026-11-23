@@ -588,7 +588,8 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 ## Build, test and benchmark
 
 The [order shipment API](examples/Orders/README.md) shows how the primitives work
-together in ASP.NET Core, with PostgreSQL transactions and HTTP integration tests.
+together in ASP.NET Core: register shipments transactionally and look up a non-empty
+batch of order IDs using DbReader and PostgreSQL. HTTP integration tests cover both workflows.
 
 ```sh
 dotnet build
