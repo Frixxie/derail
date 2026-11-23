@@ -254,7 +254,7 @@ immutable collection storage protect these invariants; none needs alternative un
 
 ### Async
 
-`MapAsync`/`BindAsync` lift async functions, and the same combinators work directly on `Task<Result<…>>` and `Task<Option<…>>`, so async pipelines read like sync ones:
+`MapAsync` and `BindAsync` accept functions returning `Task` or `ValueTask`. The same combinators work directly on a `Result` or `Option` wrapped in either type:
 
 ```csharp
 Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency, TextWriter audit) =>
@@ -265,7 +265,17 @@ Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currenc
         .TapAsync(_ => audit.WriteLineAsync("Balance converted"));
 ```
 
-On either `Result<T, TError>` or `Task<Result<T, TError>>`, `EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error. Exceptions and cancellation propagate through the task.
+On a plain `Option` or `Result`, an ordinary `async` lambda starts a `Task` pipeline. Pass a `ValueTask`-returning function to start a `ValueTask` pipeline instead. Once started, the pipeline keeps its task type:
+
+```csharp
+ValueTask<Option<Account>> FindCachedAsync(AccountNumber number) => ValueTask.FromResult(FindAccount(number));
+
+ValueTask<Result<decimal, TransferError>> balance = FindCachedAsync(number)
+    .Map((Account account) => account.Balance)
+    .ToResult(TransferError () => new TransferError.AccountNotFound(number));
+```
+
+`EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error. Exceptions and cancellation propagate to the caller.
 
 ## API overview
 
@@ -278,7 +288,7 @@ On either `Result<T, TError>` or `Task<Result<T, TError>>`, `EnsureAsync` awaits
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply`, `Sequence` (all errors) |
 | Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
-| Async | `MapAsync`, `BindAsync`, `Task<Option<T>>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, `Task<Result<T, TError>>` extensions | — |
+| Async (`Task` or `ValueTask`) | `MapAsync`, `BindAsync`, wrapped `Option<T>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, wrapped `Result<T, TError>` extensions | — |
 
 ## Build, test and benchmark
 

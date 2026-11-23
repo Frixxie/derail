@@ -3,9 +3,9 @@ namespace Derail;
 /// <summary>Async combinators for <see cref="Result{T, TError}"/> and <see cref="Option{T}"/>.</summary>
 /// <remarks>
 /// Methods on a value take an async function.
-/// Methods on a <see cref="Task{TResult}"/> continue a pipeline that is already async; the name says whether the function is.
+/// Methods on a <see cref="Task{TResult}"/> or <see cref="ValueTask{TResult}"/> continue a pipeline that is already async; the name says whether the function is.
 /// </remarks>
-public static class AsyncExtensions
+public static partial class AsyncExtensions
 {
     extension<T, TError>(Result<T, TError> result)
     {
