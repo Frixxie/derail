@@ -49,6 +49,23 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = 300 AND kind = 'order-shipped'"));
     }
 
+    [Theory]
+    [InlineData(600L, "SYN-001", HttpStatusCode.OK)]
+    [InlineData(601L, "SYN-002", HttpStatusCode.Conflict)]
+    public async Task Overlapping_shipments_commit_only_one_event(long id, string otherTracking, HttpStatusCode otherStatus)
+    {
+        await api.Execute("INSERT INTO orders (id) VALUES ($1)", id);
+        var first = new ShipmentBody("Parcel", "SYN-001");
+        var second = first with { Tracking = otherTracking };
+
+        var (left, right) = await api.ShipTogether(id, first, second);
+        Assert.Equal([HttpStatusCode.OK, otherStatus], new[] { left, right }.Order());
+
+        var winner = left == HttpStatusCode.OK ? first : second;
+        Assert.Equal(winner.Tracking, await api.Scalar<string>("SELECT tracking FROM orders WHERE id = $1", id));
+        Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = $1", id));
+    }
+
     [Fact]
     public async Task Different_shipment_conflicts_and_keeps_the_first()
     {

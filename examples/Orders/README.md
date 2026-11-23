@@ -14,10 +14,12 @@ dotnet test --project examples/Orders.Tests
 
 [`ShipmentTests`](../Orders.Tests/ShipmentTests.cs) starts a throwaway PostgreSQL
 container with Testcontainers, applies [`schema.sql`](schema.sql), and hosts the
-API in-process with `WebApplicationFactory`. Each test seeds its own synthetic
-order, calls the real HTTP endpoint and checks the stored rows. To prove rollback,
-one test makes the event insert fail **after** the order update, expects HTTP 500,
-and verifies that the order is still unshipped. The container is removed afterwards.
+API in-process with `WebApplicationFactory`. The tests use separate synthetic order IDs
+and check both HTTP responses and stored rows. The concurrency test locks an order
+until both requests are waiting: identical shipments both succeed, different shipments
+produce one conflict, and only one event is stored. To prove rollback, one test makes
+the event insert fail **after** the order update, expects HTTP 500, and verifies that
+the order is still unshipped. The container is removed afterwards.
 
 ## Try a request
 
