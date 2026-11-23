@@ -131,6 +131,9 @@ public static class ResultExtensions
                 Error<TError> => fallback,
             };
 
+        /// <summary>Returns the success value or invokes <paramref name="fallback"/> once with the original error.</summary>
+        public T GetValueOrElse(Func<TError, T> fallback) => result.Match(static value => value, fallback);
+
         /// <summary>Discards the error, keeping the success value as an option.</summary>
         public Option<T> ToOption() => result.Match(Option.Some, _ => Option.None);
 

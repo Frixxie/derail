@@ -388,6 +388,12 @@ ValueTask<Result<decimal, TransferError>> balance = FindCachedAsync(number)
 
 ### Recovery and fallback
 
+To leave the pipeline with a plain value, use `GetValueOrDefault(value)` for an
+already available fallback or `GetValueOrElse` to compute one only when needed.
+For example, `nickname.GetValueOrElse(() => LoadDisplayName())` calls
+`LoadDisplayName` only for `None`. On a `Result`, the callback receives the original
+error; on a `Validation`, it receives all errors in encounter order as a `NonEmpty<TError>`.
+
 Use `OrElse` when the fallback also returns an option. A cache hit (including
 `Some(null)`) skips the fallback entirely. Use `TapError` to observe a failure
 without replacing it, and `Recover` when the next step can succeed or return a
@@ -448,7 +454,7 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 | Recover | `OrElse` | `Recover` | — |
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply` (all errors) |
 | Collect | `Option.Sequence`, `Option.Traverse` | `Result.Sequence`, `Result.Traverse` | `Validation.Sequence`, `Validation.Traverse` |
-| Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
+| Exit | `Match`, `GetValueOrDefault`, `GetValueOrElse` | `Match`, `GetValueOrDefault`, `GetValueOrElse` | `Match`, `GetValueOrDefault`, `GetValueOrElse` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
 | Async (`Task` or `ValueTask`) | `MapAsync`, `BindAsync`, `OrElseAsync`, wrapped `Option<T>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, `RecoverAsync`, `TapErrorAsync`, wrapped `Result<T, TError>` extensions | — |
 

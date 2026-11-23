@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `GetValueOrElse` to `Option`, `Result`, and `Validation` for computing a fallback value only when needed.
+
 - Added `Flatten()` for nested `Option`, `Result`, `Reader`, and `Writer` values.
 
 - Added `AsyncReaderResult<TEnv, T, TError>` for lazy, cancellable workflows

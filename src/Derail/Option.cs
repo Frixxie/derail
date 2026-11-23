@@ -96,6 +96,9 @@ public static class OptionExtensions
         /// <summary>Returns the value, or <paramref name="fallback"/> when absent.</summary>
         public T GetValueOrDefault(T fallback) => option.Match(v => v, () => fallback);
 
+        /// <summary>Returns the present value or invokes <paramref name="fallback"/> once when absent.</summary>
+        public T GetValueOrElse(Func<T> fallback) => option.Match(static value => value, fallback);
+
         /// <summary>Converts to a result, using <paramref name="error"/> when absent.</summary>
         public Result<T, TError> ToResult<TError>(Func<TError> error) =>
             option.Match(Result.Ok<T, TError>, () => Result.Error<T, TError>(error()));

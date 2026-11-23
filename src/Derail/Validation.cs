@@ -148,6 +148,9 @@ public static class ValidationExtensions
         /// <summary>Returns the value, or <paramref name="fallback"/> when invalid.</summary>
         public T GetValueOrDefault(T fallback) => validation.Match(v => v, _ => fallback);
 
+        /// <summary>Returns the valid value or invokes <paramref name="fallback"/> once with all errors in encounter order.</summary>
+        public T GetValueOrElse(Func<NonEmpty<TError>, T> fallback) => validation.Match(static value => value, fallback);
+
         /// <summary>Converts to a result whose error is the non-empty collection of all errors.</summary>
         public Result<T, NonEmpty<TError>> ToResult() =>
             validation.Match(Result.Ok<T, NonEmpty<TError>>, Result.Error<T, NonEmpty<TError>>);
