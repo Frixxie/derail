@@ -17,4 +17,10 @@ internal static class ApiInput
             .Ensure(text => text.Length <= maxLength, _ => new(name, "too-long"))
             .Ensure(text => !text.Contains('\0'), _ => new(name, "invalid-character"))
             .ToValidation();
+
+    internal static Validation<int, FieldError> Positive(int? input, string name) =>
+        Option.FromNullable(input)
+            .ToResult(() => new FieldError(name, "required"))
+            .Ensure(value => value > 0, _ => new(name, "must-be-positive"))
+            .ToValidation();
 }

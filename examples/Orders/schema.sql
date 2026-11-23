@@ -8,6 +8,13 @@ CREATE TABLE orders (
     CHECK (carrier IS NOT NULL OR NOT delivered)
 );
 
+CREATE TABLE order_lines (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id bigint NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    sku text NOT NULL,
+    quantity int NOT NULL CHECK (quantity > 0)
+);
+
 CREATE TABLE order_events (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     order_id bigint NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
