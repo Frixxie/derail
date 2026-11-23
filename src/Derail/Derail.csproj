@@ -4,6 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Require an explicit ConfigureAwait choice in library code. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CA2007</WarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Description>Result, Option and Validation monads built on C# union types, for railway-oriented programming.</Description>

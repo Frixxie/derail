@@ -341,7 +341,16 @@ ValueTask<Result<decimal, TransferError>> balance = FindCachedAsync(number)
     .ToResult(TransferError () => new TransferError.AccountNotFound(number));
 ```
 
-`EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error. Exceptions and cancellation propagate to the caller.
+`EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error.
+
+Derail uses `ConfigureAwait(false)` for its own `Task` and `ValueTask` awaits.
+Callbacks can run inline when an input is already complete; after a pending input,
+do not assume the callback runs on your UI thread. Your own `await` controls where
+your code resumes. Await each `ValueTask` only once.
+
+Faults and cancellation from inputs or callbacks propagate to the caller; neither
+becomes `None` or a typed `Error`. To cancel an operation, pass your token to the
+underlying async call inside the callback.
 
 ## API overview
 

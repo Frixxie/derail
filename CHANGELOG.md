@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `Task` combinators now follow the same await policy as `ValueTask` combinators.
+  Callbacks after pending inputs no longer request the caller's synchronization
+  context. If a callback updates a UI, dispatch that update to the UI thread.
+
 ## 0.7.0
 
 ### Behavior changes
