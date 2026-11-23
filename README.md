@@ -135,6 +135,13 @@ The examples often spell out types to show what each step receives and returns. 
 
 ### Default initialization
 
+The Derail NuGet package includes a C# analyzer. Build error `DRL001` flags
+`default(Option<T>)`, target-typed `default`, and parameterless `new Option<T>()`
+or `new()` when the target is an option. Use `Option.None` for absence or
+`Option.Some(value)` for presence. Constructors that take a case are also valid.
+The analyzer checks explicit expressions; it cannot detect every zero-initialized
+field or array slot.
+
 These rules apply to `default` and to elements of newly allocated arrays:
 
 | Primitive | Meaning of `default` | Inspection and use |

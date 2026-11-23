@@ -3,6 +3,7 @@
     <Project Path="benchmarks/Derail.Benchmarks/Derail.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Derail.Analyzers/Derail.Analyzers.csproj" />
     <Project Path="src/Derail/Derail.csproj" />
   </Folder>
   <Folder Name="/examples/">

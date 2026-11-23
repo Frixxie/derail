@@ -4,6 +4,8 @@
 
 - **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;
   combinators that inspect it throw `SwitchExpressionException`. Use `Option.None` for absence.
+  The NuGet package includes analyzer error `DRL001` for explicit `default` and
+  parameterless construction of an option.
 
 - `Validation.Sequence` collects errors directly from their non-empty storage,
   avoiding one enumerator allocation per invalid input while preserving error order.
