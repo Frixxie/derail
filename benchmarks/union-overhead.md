@@ -20,7 +20,7 @@ dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
 Measured on 2026-11-24 against Derail library revision `e2b619db`. Apple M5 Pro,
 macOS 26.5.1, Arm64 RyuJIT, .NET SDK 11.0.100, runtime 11.0.0, C# 15 / Roslyn
 `5.12.0-1.26529.118`. BenchmarkDotNet `0.16.0-preview.2`, CSharpFunctionalExtensions
-`3.7.0`, FluentResults `4.0.0`. All 44 cases ran out of process with `MemoryDiagnoser`:
+`3.7.0`, FluentResults `4.0.0`. The original 44 cases ran out of process with `MemoryDiagnoser`:
 one launch, three warmups and three measured iterations targeting 100 ms each.
 Each cell below is **mean ns / allocated bytes per operation**, rounded. The command
 also produces full reports with confidence intervals under `results/` in the artifacts
@@ -68,17 +68,29 @@ capturing callback in `Option.Map` against a direct branch before changing stora
 
 ## Whole pipeline: equivalent observable work
 
-All four implementations reject a negative input, double a successful value,
+All five implementations reject a negative input, double a successful value,
 reject zero in the dependent step, then return the incremented value or the
 negative length of the original error message. Setup checks the outcomes. Each
 column times one fixed path, not an unpredictable mix of branches.
 
+After adding OneOf `3.0.271`, all 15 pipeline cases were rerun together against
+Derail revision `39b79f19` on the same machine and runtime with the same ShortRun
+settings. `OneOf<int, string>` uses `MapT0` for the success transform and `Match`
+for the dependent step, forwarding an existing error. To reproduce just this table:
+
+```sh
+dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
+  --filter '*UnionPipelineBenchmarks*' --job Short --iterationTime 100 \
+  --artifacts BenchmarkDotNet.Artifacts/union-pipeline-oneof
+```
+
 | Implementation | Initial error (−1) | Bind error (0) | Success (7) |
 | --- | ---: | ---: | ---: |
-| Imperative branches | 0.50 / 0 | 0.46 / 0 | 0.46 / 0 |
-| Derail | 9.61 / 72 | 7.29 / 72 | 7.16 / 72 |
-| CSharpFunctionalExtensions | 3.81 / 0 | 4.65 / 0 | 4.58 / 0 |
-| FluentResults | 127.36 / 1064 | 126.64 / 1112 | 75.14 / 784 |
+| Imperative branches | 0.52 / 0 | 0.47 / 0 | 0.46 / 0 |
+| Derail | 9.75 / 72 | 7.22 / 72 | 7.19 / 72 |
+| CSharpFunctionalExtensions | 3.80 / 0 | 4.67 / 0 | 4.60 / 0 |
+| OneOf | 4.08 / 0 | 3.61 / 0 | 3.31 / 0 |
+| FluentResults | 126.47 / 1064 | 125.65 / 1112 | 73.38 / 784 |
 
 The direct branch does not retain a typed result, and FluentResults exposes richer
 error objects and collections. This compares the cost of expressing **this workflow**,

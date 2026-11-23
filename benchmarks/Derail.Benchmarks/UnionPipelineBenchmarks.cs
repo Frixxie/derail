@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using CSharpFunctionalExtensions;
 using Cfe = CSharpFunctionalExtensions.Result;
 using Fluent = FluentResults.Result;
+using IntOrError = OneOf.OneOf<int, string>;
 
 namespace Derail.Benchmarks;
 
@@ -15,7 +16,7 @@ public class UnionPipelineBenchmarks
     public void Verify()
     {
         var expected = Imperative();
-        if (DerailPipeline() != expected || CfePipeline() != expected || FluentPipeline() != expected)
+        if (DerailPipeline() != expected || CfePipeline() != expected || FluentPipeline() != expected || OneOfPipeline() != expected)
             throw new InvalidOperationException("Pipeline outputs differ");
     }
 
@@ -40,6 +41,16 @@ public class UnionPipelineBenchmarks
         .Map(static x => x * 2)
         .Bind(static x => x == 0 ? Cfe.Failure<int>("zero") : Cfe.Success(x + 1))
         .Match(static x => x, static e => -e.Length);
+
+    [Benchmark]
+    public int OneOfPipeline()
+    {
+        IntOrError input = Input < 0 ? IntOrError.FromT1("negative") : IntOrError.FromT0(Input);
+        var outcome = input.MapT0(static x => x * 2).Match(
+            static x => x == 0 ? IntOrError.FromT1("zero") : IntOrError.FromT0(x + 1),
+            static e => IntOrError.FromT1(e));
+        return outcome.Match(static x => x, static e => -e.Length);
+    }
 
     [Benchmark]
     public int FluentPipeline()

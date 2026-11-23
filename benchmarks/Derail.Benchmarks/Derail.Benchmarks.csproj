@@ -11,6 +11,7 @@
     <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.2" />
     <PackageReference Include="CSharpFunctionalExtensions" Version="3.7.0" />
     <PackageReference Include="FluentResults" Version="4.0.0" />
+    <PackageReference Include="OneOf" Version="3.0.271" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Derail\Derail.csproj" />
