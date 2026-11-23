@@ -6,23 +6,23 @@ Core, explicit SQL, and Npgsql. The Derail NuGet package does not depend on them
 
 ## Run the integration tests
 
-From the repository root, with the .NET 11 SDK, Docker with Compose, Bash and
-Python 3 installed:
+From the repository root, with the .NET 11 SDK and a running Docker engine:
 
 ```sh
-bash examples/Orders/test.sh
+dotnet test --project examples/Orders.Tests
 ```
 
-The script starts a fresh PostgreSQL container from [`compose.yaml`](compose.yaml)
-on `127.0.0.1:55432` (set `ORDERS_DB_PORT` to use another port), seeds synthetic
-orders, and starts Kestrel on a loopback port. It tests the real HTTP
-endpoint and checks the stored rows. To prove rollback, it makes the event insert
-fail **after** the order update, expects HTTP 500, and verifies that the order
-is still unshipped. It stops the API and removes the container and its data on exit.
+[`ShipmentTests`](../Orders.Tests/ShipmentTests.cs) starts a throwaway PostgreSQL
+container with Testcontainers, applies [`schema.sql`](schema.sql), and hosts the
+API in-process with `WebApplicationFactory`. Each test seeds its own synthetic
+order, calls the real HTTP endpoint and checks the stored rows. To prove rollback,
+one test makes the event insert fail **after** the order update, expects HTTP 500,
+and verifies that the order is still unshipped. The container is removed afterwards.
 
 ## Try a request
 
-Start a local database with the schema, add an order, and point the app at it:
+Start a local database with the schema on `127.0.0.1:55432` (set `ORDERS_DB_PORT`
+to use another port), add an order, and point the app at it:
 
 ```sh
 docker compose -f examples/Orders/compose.yaml up --detach --wait

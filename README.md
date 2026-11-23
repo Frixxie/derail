@@ -605,6 +605,8 @@ src/Derail/                  Library: Option, Result, Validation, NonEmpty, Writ
 src/Derail.Analyzers/        Roslyn analyzer shipped in the package (DRL001)
 tests/Derail.Tests/          Unit, property-based and example tests
 tests/Derail.Analyzers.Tests Analyzer tests against in-process compilations
+examples/Orders/             ASP.NET Core and PostgreSQL example API
+examples/Orders.Tests/       Example integration tests (requires Docker)
 benchmarks/Derail.Benchmarks BenchmarkDotNet benchmarks
 ```
 

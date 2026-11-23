@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/Orders/Orders.csproj" />
+    <Project Path="examples/Orders.Tests/Orders.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Derail.Analyzers.Tests/Derail.Analyzers.Tests.csproj" />

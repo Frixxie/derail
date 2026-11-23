@@ -17,7 +17,7 @@ jobs:
       - run: dotnet test --project tests/Derail.Tests -c Release --no-build
       - run: dotnet test --project tests/Derail.Analyzers.Tests -c Release --no-build
       - name: Test the order API against disposable PostgreSQL
-        run: bash examples/Orders/test.sh
+        run: dotnet test --project examples/Orders.Tests -c Release --no-build
       - run: dotnet pack src/Derail -c Release --no-build -o artifacts
       - uses: actions/upload-artifact@v7
         with:
