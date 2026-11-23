@@ -175,6 +175,14 @@ public class ValidationTests
         }
 
         [Fact]
+        public void FourWay_DoesNotHideUninitializedFourthInputAfterAnError()
+        {
+            Validation<int, string> uninitialized = default;
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() =>
+                Failed.Zip(Parse("2"), Parse("3"), uninitialized, (a, b, c, d) => a + b + c + d));
+        }
+
+        [Fact]
         public void ThreeWay_CombinesValidValues() =>
             Parse("1").Zip(Parse("2"), Parse("3"), (a, b, c) => a + b + c)
                 .Should().Be(Validation.Valid<int, string>(6));

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `Validation.Zip` now combines four independent inputs and collects their errors left to right.
+
 - Added an ASP.NET Core order-shipment example with transactional PostgreSQL persistence and HTTP integration tests.
 
 - Added `GetValueOrElse` to `Option`, `Result`, and `Validation` for computing a fallback value only when needed.

@@ -1,4 +1,5 @@
 using Derail;
+using PackageConsumer;
 
 var quantity = Option.Some(3).ToResult(() => "missing quantity");
 
@@ -32,3 +33,7 @@ if (!(await workflow.Run(2)).Equals(Result.Ok<int, string>(5)))
 
 if ((await discounted).GetValueOrDefault(-1) != 14 || quote.Run(2) != 16 || (await observed).GetValueOrDefault(-1) != 4)
     throw new InvalidOperationException("Unexpected result from the packaged API.");
+
+if (Parcel.Create(30, 20, 10, 1.5m) is not Valid<Parcel>(Parcel(30, 20, 10, 1.5m)) ||
+    !Parcel.Create(0, 20, 10, -1m).Match(_ => false, errors => errors.SequenceEqual(["lengthCm", "weightKg"])))
+    throw new InvalidOperationException("Unexpected parcel validation result.");

@@ -203,6 +203,21 @@ public class ValidationProperties
     }
 
     [Property]
+    public bool FourWayZip_PreservesOrderAndCombinesExactlyOnceOnSuccess(
+        bool aOk, bool bOk, bool cOk, bool dOk, int a, int b, int c, int d)
+    {
+        Validation<int, string> Field(bool valid, int value, string name) => valid
+            ? Validation.Valid<int, string>(value)
+            : Validation.Invalid<int, string>(name, name + "!");
+        var fields = new[] { Field(aOk, a, "a"), Field(bOk, b, "b"), Field(cOk, c, "c"), Field(dOk, d, "d") };
+        var calls = 0;
+        var actual = fields[0].Zip(fields[1], fields[2], fields[3], (w, x, y, z) => { calls++; return (w, x, y, z); });
+        var errors = fields.SelectMany(Errors).ToArray();
+        return actual.Match(values => errors.Length == 0 && values == (a, b, c, d) && calls == 1,
+            observed => observed.SequenceEqual(errors) && calls == 0);
+    }
+
+    [Property]
     public bool Zip_LeftUnit(bool ok, int value, NonEmptyArray<string> errors) =>
         Validation.Valid<ValueTuple, string>(default).Zip(Make(ok, value, errors), (_, x) => x)
             .Equals(Make(ok, value, errors));

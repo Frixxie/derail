@@ -145,6 +145,15 @@ public static class ValidationExtensions
                 .Zip(second, (a, b) => (a, b))
                 .Zip(third, (ab, c) => combine(ab.a, ab.b, c));
 
+        /// <summary>Collects errors from four validations in order. Invokes the combiner only if all four are valid.</summary>
+        public Validation<TResult, TError> Zip<T2, T3, T4, TResult>(
+            Validation<T2, TError> second,
+            Validation<T3, TError> third,
+            Validation<T4, TError> fourth,
+            Func<T, T2, T3, T4, TResult> combine) =>
+            validation.Zip(second, third, static (a, b, c) => (a, b, c))
+                .Zip(fourth, (abc, d) => combine(abc.a, abc.b, abc.c, d));
+
         /// <summary>Returns the value, or <paramref name="fallback"/> when invalid.</summary>
         public T GetValueOrDefault(T fallback) => validation.Match(v => v, _ => fallback);
 

@@ -211,6 +211,15 @@ ValidateApplication("", "12", 10m);
 //          "Initial deposit must be at least 100.00, was 10.00"
 ```
 
+For four independent fields, pass the other three validations and a constructor
+function to `Zip`. The [parcel example](tests/PackageConsumer/Parcel.cs) avoids
+carrying a tuple of dimensions into a second `Zip`:
+
+```csharp
+var parcel = length.Zip(width, height, weight, (l, w, h, kg) => new Parcel(l, w, h, kg));
+```
+
+Errors follow argument order; the constructor runs only when every field is valid.
 `Validation.Sequence` checks a whole batch, and `ToResult()` hands a validated value back to a `Result` pipeline:
 
 ```csharp
@@ -452,7 +461,7 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 | Transform | `Map`, `Where` | `Map`, `MapError` | `Map`, `MapErrors` |
 | Chain | `Bind`, LINQ | `Bind`, `Ensure`, LINQ | — (use `ToResult`) |
 | Recover | `OrElse` | `Recover` | — |
-| Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply` (all errors) |
+| Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2–4 inputs), `Apply` (all errors) |
 | Collect | `Option.Sequence`, `Option.Traverse` | `Result.Sequence`, `Result.Traverse` | `Validation.Sequence`, `Validation.Traverse` |
 | Exit | `Match`, `GetValueOrDefault`, `GetValueOrElse` | `Match`, `GetValueOrDefault`, `GetValueOrElse` | `Match`, `GetValueOrDefault`, `GetValueOrElse` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
