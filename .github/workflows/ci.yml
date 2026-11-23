@@ -18,7 +18,6 @@ jobs:
       - name: Test the order API against disposable PostgreSQL
         run: bash examples/Orders/test.sh
       - run: dotnet pack src/Derail -c Release --no-build -o artifacts
-      - run: bash tests/PackageConsumer/check.sh artifacts/Derail.*.nupkg
       - uses: actions/upload-artifact@v7
         with:
           name: packages

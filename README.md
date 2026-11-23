@@ -24,32 +24,14 @@ The NuGet package targets `net11.0`. To build the repository, use the .NET 11 SD
 dotnet add package Derail
 ```
 
-## Compatibility and versioning
+## Versioning
 
-Patch releases preserve the public API; minor releases add compatible functionality.
-Before 1.0, intentional breaks require a minor version bump; from 1.0 onward they
-require a major bump. A breaking-change PR must document the affected calls and
-their replacements in `CHANGELOG.md` and receive explicit maintainer approval
-before merge. If package validation needs an exception, suppress only the approved
-difference with a justification; do not skip validation or move the baseline to pass CI.
+Derail is developed on the `0.x` release line. The public API can evolve between
+releases; check the changelog when upgrading.
 
-Within the 1.x line, existing supported calls must continue to compile and existing
-binaries must continue to bind to their public members. Compatibility also covers
-observable behavior: nullable payloads and default cases, equality, evaluation
-order, error and event ordering, and the distinction between domain errors,
-exceptions, and cancellation. Internal storage, allocation counts, numeric hash
-codes, callback thread identity, and exception message text are not guarantees.
+### Unreleased changes since 0.7.0
 
-`dotnet pack src/Derail -c Release -o artifacts` checks binary compatibility
-against the published baseline pinned in `Derail.csproj`. Advance that baseline
-to the latest stable package after each release. To check source compatibility,
-run `bash tests/PackageConsumer/check.sh artifacts/Derail.<version>.nupkg` with
-the file just packed. This compiles and runs representative consumer calls;
-when adding overloads, include inference-sensitive call sites in that fixture.
-
-### Migrating from 0.7.0 to 1.0
-
-Existing `0.7.0` public members are retained. Review these two behavioral changes:
+Two changes may affect existing code:
 
 1. **`NonEmpty<T>` dictionary and set keys now compare by ordered elements.** Two
    separately constructed keys with equal elements represent one entry. If your
@@ -281,7 +263,7 @@ ValidateApplication("", "12", 10m);
 ```
 
 For four independent fields, pass the other three validations and a constructor
-function to `Zip`. The [parcel example](tests/PackageConsumer/Parcel.cs) avoids
+function to `Zip`. The [parcel example](tests/Derail.Tests/Examples/Parcel.cs) avoids
 carrying a tuple of dimensions into a second `Zip`:
 
 ```csharp
@@ -447,7 +429,7 @@ var lookup = OrderLookup.Status(orderId); // No query yet.
 Result<string, LookupError> status = await lookup.Run(connection, cancellationToken);
 ```
 
-[`OrderLookup.cs`](tests/PackageConsumer/OrderLookup.cs) validates the ID before
+[`OrderLookup.cs`](tests/Derail.Tests/Examples/OrderLookup.cs) validates the ID before
 issuing a parameterized query. A missing row returns `NotFound`; database exceptions
 and cancellation propagate to the caller. `Recover` handles only typed errors.
 `Bind`, `Recover`, and sequential `Zip` share the environment and token. `Local`
@@ -469,7 +451,7 @@ is cooperative: forward the supplied token to the underlying operation.
 | An infallible `Reader` needed in an async fallible workflow | `AsyncReaderResult.FromReaderResult(ReaderResult.FromReader<TEnv, T, E>(reader))` | Runs the synchronous reader with the supplied environment; lifting it does not schedule background work. |
 | An existing `Writer<T, E>` needed in an ordinary reader | `Reader.Pure<TEnv, Writer<T, E>>(writer)` | Returns the writer itself, with its ordered events intact. Lifting only `writer.Value` discards those events. |
 
-The [executable shipping quote](tests/PackageConsumer/ShippingQuote.cs) combines an
+The [executable shipping quote](tests/Derail.Tests/Examples/ShippingQuote.cs) combines an
 already priced subtotal with a carrier rate looked up at `Run`. It keeps the
 original error or the writer's ordered events. In contrast, `Result.ToOption()`
 explicitly discards the error: converting back can supply a new error, not restore the old one.

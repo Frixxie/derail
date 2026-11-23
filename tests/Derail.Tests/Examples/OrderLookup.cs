@@ -1,7 +1,7 @@
 using System.Data.Common;
 using Derail;
 
-namespace PackageConsumer;
+namespace Derail.Tests.Examples;
 
 internal enum LookupError { InvalidId, NotFound }
 

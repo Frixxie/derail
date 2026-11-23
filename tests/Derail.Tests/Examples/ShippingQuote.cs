@@ -1,6 +1,6 @@
 using Derail;
 
-namespace PackageConsumer;
+namespace Derail.Tests.Examples;
 
 internal sealed record RateTable(IReadOnlyDictionary<string, decimal> Rates)
 {

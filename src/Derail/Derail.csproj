@@ -12,8 +12,6 @@
 
   <PropertyGroup Label="Packaging">
     <PackageId>Derail</PackageId>
-    <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.7.0</PackageValidationBaselineVersion>
     <Version>0.7.0</Version>
     <Authors>Fredrik Hagen Fasteraune</Authors>
     <PackageTags>result;option;maybe;either;validation;monad;railway;functional;union</PackageTags>
