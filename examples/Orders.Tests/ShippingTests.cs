@@ -1,4 +1,6 @@
 using Derail;
+using FsCheck;
+using FsCheck.Xunit;
 using Xunit;
 
 namespace Orders.Tests;
@@ -18,5 +20,16 @@ public sealed class ShippingTests
 
         Assert.Equal(requested, shipment);
         Assert.Equal(expected is null ? [] : new[] { expected }, events);
+    }
+
+    [Property]
+    public bool Shipping_the_saved_shipment_again_records_nothing(NonNull<string> carrier, NonNull<string> tracking, bool shipped)
+    {
+        var requested = new Shipment(carrier.Get, tracking.Get);
+        Option<Shipment> current = shipped ? Option.Some(requested with { Tracking = "previous" }) : Option.None;
+
+        var saved = Shipping.Ship(current, requested).Value;
+
+        return Shipping.Ship(Option.Some(saved), requested).Events.Count == 0;
     }
 }

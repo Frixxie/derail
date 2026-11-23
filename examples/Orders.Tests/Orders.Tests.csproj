@@ -10,6 +10,7 @@
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="FsCheck.Xunit.v3" Version="3.6.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="11.0.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.17.0" />
     <PackageReference Include="xunit.v3" Version="4.0.2" />
