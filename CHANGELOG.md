@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+
+- `Result` and `Option` pipelines now accept `ValueTask`-returning callbacks in `MapAsync` and `BindAsync`. `Result` also accepts them in `TapAsync` and `EnsureAsync`.
+- Chain operations directly on `ValueTask<Result<T, TError>>` and `ValueTask<Option<T>>` without converting to `Task`.
+
 ## 0.5.0
 
 ### Added
