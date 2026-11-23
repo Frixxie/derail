@@ -1,7 +1,9 @@
 namespace Derail;
 
 /// <summary>A reusable, asynchronous environment-dependent computation that stops at the first typed error.</summary>
-/// <remarks>Constructing and composing workflows does not run them. Exceptions and cancellation are not domain errors.</remarks>
+/// <remarks>Constructing and composing workflows does not run them. At execution, nested steps consume stack
+/// before the first await yields. For unbounded batches, iterate inside one workflow rather than composing a step
+/// per element. Exceptions and cancellation are not domain errors.</remarks>
 public sealed class AsyncReaderResult<TEnv, T, TError>
 {
     private readonly Func<TEnv, CancellationToken, Task<Result<T, TError>>> _run;

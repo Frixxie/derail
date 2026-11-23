@@ -396,7 +396,7 @@ and reruns the computation on each invocation. `Local` adapts an outer environme
 `Reader.Pure<TEnv, T>(value)` ignores it. Delegates and reference values are not cloned,
 and neither purity nor thread safety is enforced.
 
-`Reader` and `ReaderResult` execute nested delegates. For an unbounded collection,
+`Reader`, `ReaderResult`, and `AsyncReaderResult` execute nested delegates. For an unbounded collection,
 iterate inside one computation instead of chaining one `Map` or `Bind` per item;
 the latter consumes stack as the chain grows. See the [large-chain measurements](benchmarks/large-chains.md).
 
@@ -451,6 +451,24 @@ executing. Lift existing values with `FromResult` and computations with `FromRea
 operations, but has single-consumption constraints; there is one `Task`-based
 workflow API. A pre-canceled token prevents execution. Once I/O starts, cancellation
 is cooperative: forward the supplied token to the underlying operation.
+
+Keep the number of composed steps bounded: `Run` enters the preceding `Map` or
+`Bind` synchronously, even when the underlying I/O eventually yields. For a batch
+whose size is known only at run time, iterate **inside one workflow**. For example,
+this reader sums a stream of quantities and stops reading at the first invalid item:
+
+```csharp
+var totalQuantity = new AsyncReaderResult<IAsyncEnumerable<int>, long, string>(async (quantities, token) =>
+{
+    long total = 0;
+    await foreach (var quantity in quantities.WithCancellation(token))
+    {
+        if (quantity < 0) return new Error<string>("negative-quantity");
+        total += quantity;
+    }
+    return new Ok<long>(total);
+});
+```
 
 #### Bringing existing values into a reader workflow
 
