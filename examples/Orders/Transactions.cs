@@ -12,6 +12,7 @@ internal static class Transactions
         // Npgsql runs every command on the connection's open transaction, so steps need only the connection.
         await using var transaction = await connection.BeginTransactionAsync(token);
         var result = await workflow.Run(connection, token);
+        // Disposing an uncommitted transaction rolls it back, so a typed error or exception saves nothing.
         if (result.IsOk) await transaction.CommitAsync(token);
         return result;
     }

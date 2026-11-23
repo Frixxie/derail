@@ -13,17 +13,19 @@ internal sealed record NewOrderLine(string Sku, int Quantity);
 internal sealed record Order(long Id, string Description, IEnumerable<OrderLine> Lines);
 internal sealed record OrderLine(long Id, string Sku, int Quantity);
 internal sealed record OrderPage(int Limit, long After, Option<bool> Shipped);
-internal enum OrderError { NotFound, KeyReused }
+internal sealed record OrderList(IReadOnlyList<Order> Items, long? Next);
+internal enum OrderError { NotFound, KeyReused, Delivered }
 
 internal static class OrderEndpoints
 {
     public static Task<IResult> List(string? limit, string? after, string? shipped, NpgsqlDataSource db, CancellationToken token) =>
         Page(limit, after, shipped).OnValid(async page =>
         {
-            var filter = page.Shipped.Match(isShipped => isShipped ? "AND carrier IS NOT NULL" : "AND carrier IS NULL", () => "");
+            var query = page.Shipped.Match(isShipped => isShipped ? ShippedOrders : UnshippedOrders, () => AllOrders);
             await using var connection = await db.OpenConnectionAsync(token);
-            return Results.Ok(await connection.ReadAsync<Order>(token,
-                SelectOrders($"SELECT * FROM orders WHERE id > @After {filter} ORDER BY id LIMIT @Limit"), new { page.After, page.Limit }));
+            var items = (await connection.ReadAsync<Order>(token, query, new { page.After, page.Limit })).ToList();
+            // A full page may have more after it; a short page is the last one.
+            return Results.Ok(new OrderList(items, items.Count == page.Limit ? items[^1].Id : null));
         });
 
     public static Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token) =>
@@ -65,10 +67,8 @@ internal static class OrderEndpoints
             .Zip(Lines(request.Lines ?? []), (description, lines) => new NewOrder(description, lines));
 
     private static Validation<NonEmpty<NewOrderLine>, FieldError> Lines(IReadOnlyList<OrderLineRequest?> lines) =>
-        NonEmpty.FromEnumerable(lines).Match(
-            requested => Line(requested.Head, 0).Zip(
-                Validation.Traverse(requested.Tail.Index(), line => Line(line.Item, line.Index + 1)),
-                (head, tail) => new NonEmpty<NewOrderLine>(head, [.. tail])),
+        NonEmpty.FromEnumerable(lines.Index()).Match(
+            requested => Validation.Traverse(requested, line => Line(line.Item, line.Index)),
             () => Validation.Invalid<NonEmpty<NewOrderLine>, FieldError>(new("lines", "required")));
 
     private static Validation<NewOrderLine, FieldError> Line(OrderLineRequest? line, int index) =>
@@ -76,22 +76,24 @@ internal static class OrderEndpoints
             .Zip(ApiInput.Positive(line?.Quantity, "quantity"), (sku, quantity) => new NewOrderLine(sku, quantity))
             .MapErrors(error => error with { Field = $"lines[{index}].{error.Field}" });
 
-    // DbReader maps the lines_* columns into Order.Lines.
-    private static string SelectOrders(string orders) => $"""
-        SELECT o.id, o.description, l.id AS lines_id, l.sku AS lines_sku, l.quantity AS lines_quantity
-        FROM ({orders}) o LEFT JOIN order_lines l ON l.order_id = o.id
-        ORDER BY o.id, l.id
-        """;
+    // Every query is a compile-time constant; inputs are always parameters. DbReader maps the lines_* columns into Order.Lines.
+    private const string Columns = "SELECT o.id, o.description, l.id AS lines_id, l.sku AS lines_sku, l.quantity AS lines_quantity";
+    private const string WithLines = "LEFT JOIN order_lines l ON l.order_id = o.id ORDER BY o.id, l.id";
+    private const string OrderById = $"{Columns} FROM (SELECT * FROM orders WHERE id = @Id) o {WithLines}";
+    private const string OrderByKey = $"{Columns} FROM (SELECT * FROM orders WHERE idempotency_key = @Key) o {WithLines}";
+    private const string AllOrders = $"{Columns} FROM (SELECT * FROM orders WHERE id > @After ORDER BY id LIMIT @Limit) o {WithLines}";
+    private const string ShippedOrders =
+        $"{Columns} FROM (SELECT * FROM orders WHERE id > @After AND carrier IS NOT NULL ORDER BY id LIMIT @Limit) o {WithLines}";
+    private const string UnshippedOrders =
+        $"{Columns} FROM (SELECT * FROM orders WHERE id > @After AND carrier IS NULL ORDER BY id LIMIT @Limit) o {WithLines}";
 
     private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> Find(long id) =>
-        FindWhere("id = @Id", new { id });
+        FindOne(OrderById, new { id });
 
-    private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> FindWhere(string condition, object arguments) =>
-        new(async (connection, token) =>
-        {
-            var orders = await connection.ReadAsync<Order>(token, SelectOrders($"SELECT * FROM orders WHERE {condition}"), arguments);
-            return Option.FromNullable(orders.SingleOrDefault()).ToResult(() => OrderError.NotFound);
-        });
+    private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> FindOne(string query, object arguments) =>
+        AsyncReaderResult.FromLookup<NpgsqlConnection, Order, OrderError>(
+            async (connection, token) => Option.FromNullable((await connection.ReadAsync<Order>(token, query, arguments)).SingleOrDefault()),
+            () => OrderError.NotFound);
 
     // Fails with the idempotency key when an order already uses it.
     private static AsyncReaderResult<NpgsqlConnection, long, string> Insert(NewOrder order, string? key) =>
@@ -109,22 +111,26 @@ internal static class OrderEndpoints
 
     // A retry with the same key and order gets the original order; a different order is rejected.
     private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replay(string key, NewOrder order) =>
-        FindWhere("idempotency_key = @Key", new { key })
+        FindOne(OrderByKey, new { key })
             .Ensure(existing => existing.Description == order.Description
                     && existing.Lines.Select(line => new NewOrderLine(line.Sku, line.Quantity)).SequenceEqual(order.Lines),
                 _ => OrderError.KeyReused)
             .Map(existing => existing.Id);
 
+    // A delivered order is final, so its description and lines can no longer change.
     private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replace(long id, NewOrder order) =>
-        new(async (connection, token) =>
-        {
-            var count = await connection.ExecuteAsync(token,
-                "UPDATE orders SET description = @Description WHERE id = @Id", new { id, order.Description });
-            if (count == 0) return Result.Error<long, OrderError>(OrderError.NotFound);
-            await connection.ExecuteAsync(token, "DELETE FROM order_lines WHERE order_id = @Id", new { id });
-            await InsertLines(connection, id, order.Lines, token);
-            return Result.Ok<long, OrderError>(id);
-        });
+        AsyncReaderResult.FromLookup<NpgsqlConnection, bool, OrderError>(
+                async (connection, token) => Option.FromNullable<bool>(
+                    (await connection.ReadAsync<bool?>(token, "SELECT delivered FROM orders WHERE id = @Id FOR UPDATE", new { id })).SingleOrDefault()),
+                () => OrderError.NotFound)
+            .Ensure(delivered => !delivered, _ => OrderError.Delivered)
+            .Bind(_ => AsyncReaderResult.FromTask<NpgsqlConnection, long, OrderError>(async (connection, token) =>
+            {
+                await connection.ExecuteAsync(token, "UPDATE orders SET description = @Description WHERE id = @Id", new { id, order.Description });
+                await connection.ExecuteAsync(token, "DELETE FROM order_lines WHERE order_id = @Id", new { id });
+                await InsertLines(connection, id, order.Lines, token);
+                return id;
+            }));
 
     private static async Task InsertLines(NpgsqlConnection connection, long orderId, NonEmpty<NewOrderLine> lines, CancellationToken token)
     {
@@ -137,6 +143,7 @@ internal static class OrderEndpoints
     {
         OrderError.NotFound => ApiResults.NotFound("order-not-found"),
         OrderError.KeyReused => ApiResults.Problem(StatusCodes.Status422UnprocessableEntity, "idempotency-key-reused"),
+        OrderError.Delivered => ApiResults.Problem(StatusCodes.Status409Conflict, "order-delivered"),
         _ => throw new UnreachableException(),
     };
 }

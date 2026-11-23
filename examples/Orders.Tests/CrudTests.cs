@@ -13,6 +13,7 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
     private sealed record OrderWithLines(long Id, string Description, Line[] Lines);
     private sealed record Line(string Sku, int Quantity);
     private sealed record Shipment(string Carrier, string Tracking);
+    private sealed record OrderList(Order[] Items, long? Next);
 
     [Fact]
     public async Task Order_and_shipment_can_be_managed_independently()
@@ -25,9 +26,8 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         var path = $"/orders/{order.Id}";
         Assert.Equal(path, created.Headers.Location?.OriginalString);
         Assert.Equal("Sample", order.Description);
-        var orders = await client.GetFromJsonAsync<Order[]>("/orders", token);
-        Assert.NotNull(orders);
-        Assert.Contains(order, orders);
+        var orders = await client.GetFromJsonAsync<OrderList>($"/orders?after={order.Id - 1}&limit=1", token);
+        Assert.Equal(new[] { order }, orders?.Items);
 
         var shipment = path + "/shipment";
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(shipment, token)).StatusCode);
@@ -112,13 +112,17 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         await api.Client.PutAsJsonAsync($"/orders/{ids[1]}/shipment", new Shipment("Parcel", "SYN-1"), token);
         var after = ids[0] - 1;
 
-        var page = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&limit=2", token);
-        var shipped = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&shipped=true", token);
-        var unshipped = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&shipped=false", token);
+        var page = await api.Client.GetFromJsonAsync<OrderList>($"/orders?after={after}&limit=2", token);
+        var rest = await api.Client.GetFromJsonAsync<OrderList>($"/orders?after={page?.Next}&limit=2", token);
+        var shipped = await api.Client.GetFromJsonAsync<OrderList>($"/orders?after={after}&shipped=true", token);
+        var unshipped = await api.Client.GetFromJsonAsync<OrderList>($"/orders?after={after}&shipped=false", token);
 
-        Assert.Equal(ids[..2], page?.Select(order => order.Id));
-        Assert.Equal([ids[1]], shipped?.Select(order => order.Id));
-        Assert.Equal([ids[0], ids[2]], unshipped?.Select(order => order.Id));
+        Assert.Equal(ids[..2], page?.Items.Select(order => order.Id));
+        Assert.Equal(ids[1], page?.Next);
+        Assert.Equal([ids[2]], rest?.Items.Select(order => order.Id));
+        Assert.Null(rest?.Next);
+        Assert.Equal([ids[1]], shipped?.Items.Select(order => order.Id));
+        Assert.Equal([ids[0], ids[2]], unshipped?.Items.Select(order => order.Id));
     }
 
     [Fact]
@@ -153,6 +157,23 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
         var problem = await reused.Content.ReadFromJsonAsync<JsonElement>(token);
         Assert.Equal("idempotency-key-reused", problem.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Delivered_order_cannot_be_updated()
+    {
+        var token = TestContext.Current.CancellationToken;
+        // Create through the API so the id comes from the sequence; a fixed id would appear in other tests' order pages.
+        var created = await api.Client.PostAsJsonAsync("/orders", new { description = "Sample", lines = OneLine }, token);
+        var id = Assert.IsType<Order>(await created.Content.ReadFromJsonAsync<Order>(token)).Id;
+        await api.Execute("UPDATE orders SET carrier = 'Parcel', tracking = 'SYN-1', delivered = true WHERE id = $1", id);
+
+        var response = await api.Client.PutAsJsonAsync($"/orders/{id}", new { description = "Changed", lines = OneLine }, token);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(token);
+        Assert.Equal("order-delivered", problem.GetProperty("code").GetString());
+        Assert.Equal("Sample", await api.Scalar<string>("SELECT description FROM orders WHERE id = $1", id));
     }
 
     private static async Task<Dictionary<string, string[]>?> Errors(HttpResponseMessage response)

@@ -6,7 +6,7 @@ using Npgsql;
 namespace Orders;
 
 internal sealed record ShipmentRequest(string? Carrier, string? Tracking);
-internal sealed record ShipmentImportRow(long OrderId, string? Carrier, string? Tracking);
+internal sealed record ShipmentImportRow(long? OrderId, string? Carrier, string? Tracking);
 internal sealed record Shipment(string Carrier, string Tracking);
 internal sealed record OrderShipment(long OrderId, Shipment Shipment);
 internal sealed record ShipmentStatus(string Carrier, string Tracking, bool Delivered);
@@ -16,39 +16,47 @@ internal enum ShipmentError { OrderNotFound, ShipmentNotFound, AlreadyDelivered 
 
 internal static class ShipmentEndpoints
 {
+    private const string ReadShipping = "SELECT carrier, tracking, delivered FROM orders WHERE id = @Id";
+    private const string LockShipping = $"{ReadShipping} FOR UPDATE";
+
     public static Task<IResult> Put(long id, ShipmentRequest request, NpgsqlDataSource db, CancellationToken token) =>
         Validate(request.Carrier, request.Tracking).OnValid(shipment => ShipOrder(id, shipment)
             .InTransaction(db, token)
             .Match(saved => Results.Ok(saved), Problem));
 
     public static Task<IResult> Import(IReadOnlyList<ShipmentImportRow?> rows, NpgsqlDataSource db, CancellationToken token) =>
-        Validation.Traverse(rows.Index(), row => Validate(row.Item?.Carrier, row.Item?.Tracking)
-                .Map(shipment => new OrderShipment(row.Item?.OrderId ?? 0, shipment))
-                .MapErrors(error => error with { Field = $"[{row.Index}].{error.Field}" }))
+        NonEmpty.FromEnumerable(rows.Index())
+            .Match(
+                requested => Validation.Traverse(requested, row => ImportRow(row.Item)
+                    .MapErrors(error => error with { Field = $"[{row.Index}].{error.Field}" })),
+                () => Validation.Invalid<NonEmpty<OrderShipment>, FieldError>(new("shipments", "required")))
             .OnValid(shipments => ShipAll(shipments)
                 .InTransaction(db, token)
                 .Match(_ => Results.NoContent(), failure => Problem(failure.Error, failure.Index)));
 
-    public static async Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token)
-    {
-        await using var connection = await db.OpenConnectionAsync(token);
-        var rows = await connection.ReadAsync<ShipmentStatus>(token,
-            "SELECT carrier, tracking, delivered FROM orders WHERE id = @Id AND carrier IS NOT NULL", new { id });
-        return Option.FromNullable(rows.SingleOrDefault()).OkOrNotFound("shipment-not-found");
-    }
+    public static Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token) =>
+        Load(ReadShipping, id)
+            .Bind(order => AsyncReaderResult.FromResult<NpgsqlConnection, ShipmentStatus, ShipmentError>(order.Shipment
+                .Map(shipment => new ShipmentStatus(shipment.Carrier, shipment.Tracking, order.Delivered))
+                .ToResult(() => ShipmentError.ShipmentNotFound)))
+            .InTransaction(db, token)
+            .Match(status => Results.Ok(status), Problem);
 
     public static Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token) =>
-        Lock(id)
+        Load(LockShipping, id)
             .Ensure(order => order.Shipment.IsSome, _ => ShipmentError.ShipmentNotFound)
             .Ensure(order => !order.Delivered, _ => ShipmentError.AlreadyDelivered)
-            .Bind(_ => Execute("UPDATE orders SET carrier = NULL, tracking = NULL WHERE id = @Id", id))
+            .Bind(_ => Change(id, "UPDATE orders SET carrier = NULL, tracking = NULL WHERE id = @Id", "shipment-removed"))
             .InTransaction(db, token)
             .Match(_ => Results.NoContent(), Problem);
 
+    // Repeating a delivery succeeds without recording a second event.
     public static Task<IResult> Deliver(long id, NpgsqlDataSource db, CancellationToken token) =>
-        Lock(id)
+        Load(LockShipping, id)
             .Ensure(order => order.Shipment.IsSome, _ => ShipmentError.ShipmentNotFound)
-            .Bind(_ => Execute("UPDATE orders SET delivered = true WHERE id = @Id", id))
+            .Bind(order => order.Delivered
+                ? AsyncReaderResult.Pure<NpgsqlConnection, long, ShipmentError>(id)
+                : Change(id, "UPDATE orders SET delivered = true WHERE id = @Id", "shipment-delivered"))
             .InTransaction(db, token)
             .Match(_ => Results.NoContent(), Problem);
 
@@ -56,14 +64,18 @@ internal static class ShipmentEndpoints
         ApiInput.Field(carrier, "carrier", 40)
             .Zip(ApiInput.Field(tracking, "tracking", 80), (validCarrier, validTracking) => new Shipment(validCarrier, validTracking));
 
+    private static Validation<OrderShipment, FieldError> ImportRow(ShipmentImportRow? row) =>
+        ApiInput.Positive(row?.OrderId, "orderId")
+            .Zip(Validate(row?.Carrier, row?.Tracking), (orderId, shipment) => new OrderShipment(orderId, shipment));
+
     private static AsyncReaderResult<NpgsqlConnection, Shipment, ShipmentError> ShipOrder(long id, Shipment shipment) =>
-        Lock(id)
+        Load(LockShipping, id)
             .Ensure(order => !order.Delivered, _ => ShipmentError.AlreadyDelivered)
             .Map(order => Shipping.Ship(order.Shipment, shipment))
             .Bind(shipped => Save(id, shipped));
 
     // Loops inside one step rather than chaining a Bind per row, so a large batch does not deepen the call stack.
-    private static AsyncReaderResult<NpgsqlConnection, int, (int Index, ShipmentError Error)> ShipAll(IReadOnlyList<OrderShipment> shipments) =>
+    private static AsyncReaderResult<NpgsqlConnection, int, (int Index, ShipmentError Error)> ShipAll(NonEmpty<OrderShipment> shipments) =>
         new(async (connection, token) =>
         {
             foreach (var (index, item) in shipments.Index())
@@ -74,31 +86,36 @@ internal static class ShipmentEndpoints
             return Result.Ok<int, (int, ShipmentError)>(shipments.Count);
         });
 
-    private static AsyncReaderResult<NpgsqlConnection, OrderShipping, ShipmentError> Lock(long id) =>
-        new(async (connection, token) =>
-        {
-            var rows = await connection.ReadAsync<ShippingRow>(token,
-                "SELECT carrier, tracking, delivered FROM orders WHERE id = @Id FOR UPDATE", new { id });
-            return Option.FromNullable(rows.SingleOrDefault())
+    // Pass LockShipping before a write, so concurrent changes to the same order wait for each other.
+    private static AsyncReaderResult<NpgsqlConnection, OrderShipping, ShipmentError> Load(string query, long id) =>
+        AsyncReaderResult.FromLookup<NpgsqlConnection, OrderShipping, ShipmentError>(
+            async (connection, token) => Option.FromNullable((await connection.ReadAsync<ShippingRow>(token, query, new { id })).SingleOrDefault())
                 .Map(row => new OrderShipping(
                     Option.FromNullable(row.Carrier).Zip(Option.FromNullable(row.Tracking), (carrier, tracking) => new Shipment(carrier, tracking)),
-                    row.Delivered))
-                .ToResult(() => ShipmentError.OrderNotFound);
-        });
+                    row.Delivered)),
+            () => ShipmentError.OrderNotFound);
 
     private static AsyncReaderResult<NpgsqlConnection, Shipment, ShipmentError> Save(long id, Writer<Shipment, string> shipped) =>
-        new(async (connection, token) =>
+        AsyncReaderResult.FromTask<NpgsqlConnection, Shipment, ShipmentError>(async (connection, token) =>
         {
             var (shipment, events) = shipped;
             await connection.ExecuteAsync(token, "UPDATE orders SET carrier = @Carrier, tracking = @Tracking WHERE id = @Id",
                 new { Id = id, shipment.Carrier, shipment.Tracking });
             foreach (var kind in events)
-                await connection.ExecuteAsync(token, "INSERT INTO order_events (order_id, kind) VALUES (@Id, @Kind)", new { Id = id, Kind = kind });
-            return Result.Ok<Shipment, ShipmentError>(shipment);
+                await Record(connection, id, kind, token);
+            return shipment;
         });
 
-    private static AsyncReaderResult<NpgsqlConnection, int, ShipmentError> Execute(string sql, long id) =>
-        new(async (connection, token) => Result.Ok<int, ShipmentError>(await connection.ExecuteAsync(token, sql, new { id })));
+    private static AsyncReaderResult<NpgsqlConnection, long, ShipmentError> Change(long id, string update, string kind) =>
+        AsyncReaderResult.FromTask<NpgsqlConnection, long, ShipmentError>(async (connection, token) =>
+        {
+            await connection.ExecuteAsync(token, update, new { id });
+            await Record(connection, id, kind, token);
+            return id;
+        });
+
+    private static Task<int> Record(NpgsqlConnection connection, long id, string kind, CancellationToken token) =>
+        connection.ExecuteAsync(token, "INSERT INTO order_events (order_id, kind) VALUES (@Id, @Kind)", new { Id = id, Kind = kind });
 
     private static IResult Problem(ShipmentError error) => Problem(error, null);
 

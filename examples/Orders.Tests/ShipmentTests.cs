@@ -167,6 +167,63 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal("SYN-1,SYN-2", await api.Scalar<string>("SELECT string_agg(tracking, ',' ORDER BY id) FROM orders WHERE id IN (820, 821)"));
     }
 
+    [Fact]
+    public async Task Import_requires_an_order_id_and_at_least_one_row()
+    {
+        var token = TestContext.Current.CancellationToken;
+
+        var missing = await api.Client.PostAsJsonAsync("/shipments", new object?[]
+        {
+            new { carrier = "Parcel", tracking = "SYN-1" },
+            null,
+            new { orderId = 0, carrier = "Parcel", tracking = "SYN-3" },
+        }, token);
+        var empty = await api.Client.PostAsJsonAsync("/shipments", Array.Empty<object>(), token);
+
+        Assert.Equal(new Dictionary<string, string[]>
+        {
+            ["[0].orderId"] = ["required"],
+            ["[1].orderId"] = ["required"],
+            ["[1].carrier"] = ["required"],
+            ["[1].tracking"] = ["required"],
+            ["[2].orderId"] = ["must-be-positive"],
+        }, (await Problem(missing, HttpStatusCode.BadRequest)).GetProperty("errors").Deserialize<Dictionary<string, string[]>>());
+        Assert.Equal(new Dictionary<string, string[]> { ["shipments"] = ["required"] },
+            (await Problem(empty, HttpStatusCode.BadRequest)).GetProperty("errors").Deserialize<Dictionary<string, string[]>>());
+    }
+
+    [Fact]
+    public async Task Delivery_and_removal_are_recorded_once()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (720, 'Sample'), (721, 'Sample')");
+        var token = TestContext.Current.CancellationToken;
+
+        await api.Ship(720, Requested);
+        await api.Client.PutAsync("/orders/720/shipment/delivery", null, token);
+        var repeated = await api.Client.PutAsync("/orders/720/shipment/delivery", null, token);
+        await api.Ship(721, Requested);
+        await api.Client.DeleteAsync("/orders/721/shipment", token);
+
+        Assert.Equal(HttpStatusCode.NoContent, repeated.StatusCode);
+        Assert.Equal("order-shipped,shipment-delivered",
+            await api.Scalar<string>("SELECT string_agg(kind, ',' ORDER BY id) FROM order_events WHERE order_id = 720"));
+        Assert.Equal("order-shipped,shipment-removed",
+            await api.Scalar<string>("SELECT string_agg(kind, ',' ORDER BY id) FROM order_events WHERE order_id = 721"));
+    }
+
+    [Fact]
+    public async Task Reading_a_shipment_distinguishes_a_missing_order_from_an_unshipped_one()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (730, 'Sample')");
+        var token = TestContext.Current.CancellationToken;
+
+        var unshipped = await api.Client.GetAsync("/orders/730/shipment", token);
+        var missing = await api.Client.GetAsync("/orders/731/shipment", token);
+
+        Assert.Equal("shipment-not-found", (await Problem(unshipped, HttpStatusCode.NotFound)).GetProperty("code").GetString());
+        Assert.Equal("order-not-found", (await Problem(missing, HttpStatusCode.NotFound)).GetProperty("code").GetString());
+    }
+
     private sealed record ShipmentBody(string Carrier, string Tracking);
     private sealed record DeliveredBody(string Carrier, string Tracking, bool Delivered);
 
