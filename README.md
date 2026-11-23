@@ -31,7 +31,7 @@ using Derail;
 
 Use `Result` for a sequence of dependent steps that should stop at the first expected failure. Use `Validation` when checks are independent and the caller needs every error.
 
-For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind(a => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
+For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind((Account a) => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
 
 Use `Ensure` to reject a successful value that fails a rule, and `Tap` for a synchronous observation such as recording a metric. An existing error skips both. For an async predicate or observation, use `EnsureAsync` or `TapAsync`. If the step returns its own `Result`, use `Bind` or `BindAsync`.
 
@@ -47,9 +47,9 @@ Option<Account> FindAccount(AccountNumber number) =>
 
 string displayName = Option.FromNullable(account.Nickname).GetValueOrDefault(account.Number.Value);
 
-Option<Account> premium = FindAccount(number).Where(a => a.Balance >= 500m);
+Option<Account> premium = FindAccount(number).Where((Account a) => a.Balance >= 500m);
 
-Option<decimal> total = FindAccount(savings).Zip(FindAccount(checking), (a, b) => a.Balance + b.Balance);
+Option<decimal> total = FindAccount(savings).Zip(FindAccount(checking), (Account a, Account b) => a.Balance + b.Balance);
 ```
 
 ### Result: pipelines that stop at the first failure
@@ -76,10 +76,10 @@ This pipeline logs a completed withdrawal and returns the new balance. A frozen 
 TextWriter log = Console.Out;
 Result<decimal, TransferError> balance = ParseAccountNumber(input)
     .Bind(GetAccount)
-    .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
-    .Bind(a => Withdraw(a, 100m))
-    .Tap(_ => log.WriteLine("Withdrawal completed"))
-    .Map(a => a.Balance);
+    .Ensure((Account a) => !a.Frozen, (Account a) => new TransferError.AccountFrozen(a.Number))
+    .Bind((Account a) => Withdraw(a, 100m))
+    .Tap((Account _) => log.WriteLine("Withdrawal completed"))
+    .Map((Account a) => a.Balance);
 ```
 
 When later steps need earlier values, use query syntax:
@@ -107,14 +107,14 @@ string message = Transfer(from, to, 200m) switch
 };
 
 int status = Transfer(from, to, amount)
-    .MapError(error => error switch
+    .MapError((TransferError error) => error switch
     {
         TransferError.AccountNotFound => 404,
         TransferError.AccountFrozen => 423,
         TransferError.InsufficientFunds => 409,
         _ => 400,
     })
-    .Match(_ => 200, code => code);
+    .Match((Receipt _) => 200, (int code) => code);
 ```
 
 ### Validation: report every problem at once
@@ -122,7 +122,7 @@ int status = Transfer(from, to, amount)
 ```csharp
 Validation<AccountApplication, string> ValidateApplication(string owner, string number, decimal deposit) =>
     ValidateOwner(owner).Zip(ValidateNumber(number), ValidateDeposit(deposit),
-        (o, n, d) => new AccountApplication(o, n, d));
+        (string o, AccountNumber n, decimal d) => new AccountApplication(o, n, d));
 
 ValidateApplication("", "12", 10m);
 // Invalid: "Owner is required", "'12' is not an account number",
@@ -138,8 +138,8 @@ Result<AccountApplication, NonEmpty<string>> application =
     ValidateApplication("", "12", 500m).ToResult();
 
 string message = application
-    .Map(a => $"Welcome, {a.Owner}")
-    .Match(ok => ok, errors => string.Join("; ", errors));
+    .Map((AccountApplication a) => $"Welcome, {a.Owner}")
+    .Match((string ok) => ok, (NonEmpty<string> errors) => string.Join("; ", errors));
 // "Owner is required; '12' is not an account number"
 ```
 
@@ -147,8 +147,8 @@ Failures always have a first error, so an error summary needs no empty-list fall
 
 ```csharp
 string summary = ValidateApplication("", "12", 10m).Match(
-    _ => "Application accepted",
-    errors => $"{errors.Head} ({errors.Tail.Count} more problems)");
+    (AccountApplication _) => "Application accepted",
+    (NonEmpty<string> errors) => $"{errors.Head} ({errors.Tail.Count} more problems)");
 // "Owner is required (2 more problems)"
 ```
 
@@ -176,7 +176,8 @@ Result<NonEmpty<Payment>, string> batch = RequirePayments([
     new Payment(Seized.Number, 50m),
 ]);
 
-Result<decimal, string> total = batch.Map(payments => payments.Map(payment => payment.Amount).Sum()); // Ok(250m)
+Result<decimal, string> total = batch.Map((NonEmpty<Payment> payments) =>
+    payments.Map((Payment payment) => payment.Amount).Sum()); // Ok(250m)
 Result<NonEmpty<Payment>, string> empty = RequirePayments([]); // Error("At least one payment is required")
 ```
 
@@ -192,7 +193,7 @@ Non-emptiness alone does not validate payment amounts or destination accounts.
 sealed record TransferRecorded(AccountNumber From, AccountNumber To, decimal Amount);
 
 Result<Writer<Receipt, TransferRecorded>, TransferError> result = Transfer("1234.56.78901", "1098.76.54321", 200m)
-    .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+    .Map((Receipt receipt) => new Writer<Receipt, TransferRecorded>(receipt,
         [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)]));
 
 // Ok: a receipt paired with one audit event. Error: no Writer is produced.
@@ -210,7 +211,8 @@ events. Production code must coordinate persistence and event delivery separatel
 ```csharp
 Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
     Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
-        .Map(ledger => ledger.Values.Sum(account => account.Balance));
+        .Map((IReadOnlyDictionary<AccountNumber, Account> ledger) =>
+            ledger.Values.Sum((Account account) => account.Balance));
 
 Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> report = TotalBalance();
 decimal total = report.Run(Ledger); // 6050m
@@ -230,8 +232,8 @@ and neither purity nor thread safety is enforced.
 ```csharp
 ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError>
     AuditedTransfer(string fromInput, string toInput, decimal amount) =>
-    new(ledger => Transfer(fromInput, toInput, amount, ledger)
-        .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+    new((IReadOnlyDictionary<AccountNumber, Account> ledger) => Transfer(fromInput, toInput, amount, ledger)
+        .Map((Receipt receipt) => new Writer<Receipt, TransferRecorded>(receipt,
             [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
 
 ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError> workflow =
@@ -259,10 +261,10 @@ immutable collection storage protect these invariants; none needs alternative un
 ```csharp
 Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency, TextWriter audit) =>
     ParseAccountNumber(input)
-        .BindAsync(n => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
-        .EnsureAsync(IsActiveAsync, a => new TransferError.AccountFrozen(a.Number))
-        .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency))
-        .TapAsync(_ => audit.WriteLineAsync("Balance converted"));
+        .BindAsync((AccountNumber n) => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
+        .EnsureAsync(IsActiveAsync, (Account a) => new TransferError.AccountFrozen(a.Number))
+        .MapAsync(async (Account a) => a.Balance * await ExchangeRateAsync(currency))
+        .TapAsync((decimal _) => audit.WriteLineAsync("Balance converted"));
 ```
 
 On a plain `Option` or `Result`, an ordinary `async` lambda starts a `Task` pipeline. Pass a `ValueTask`-returning function to start a `ValueTask` pipeline instead. Once started, the pipeline keeps its task type:

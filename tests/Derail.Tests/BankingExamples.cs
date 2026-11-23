@@ -35,7 +35,7 @@ public class BankingExamples
     private static readonly Account Seized = new(new("11111111111"), "Ola", 5_000m, Frozen: true);
 
     private static readonly Dictionary<AccountNumber, Account> Ledger =
-        new[] { Savings, Checking, Seized }.ToDictionary(a => a.Number);
+        new[] { Savings, Checking, Seized }.ToDictionary((Account a) => a.Number);
 
     // --- Building blocks -------------------------------------------------------------
 
@@ -83,7 +83,7 @@ public class BankingExamples
 
     private static Result<Account, TransferError> OpenAccount(string input, IReadOnlyDictionary<AccountNumber, Account> ledger) =>
         ParseAccountNumber(input)
-            .Bind(number => FindAccount(number, ledger).ToResult(TransferError () => new TransferError.AccountNotFound(number)))
+            .Bind((AccountNumber number) => FindAccount(number, ledger).ToResult(TransferError () => new TransferError.AccountNotFound(number)))
             .Bind(EnsureActive);
 
     // --- The transfer pipeline -------------------------------------------------------
@@ -130,8 +130,8 @@ public class BankingExamples
     [Fact]
     public void Option_LookupThenMap()
     {
-        Option<decimal> balance = FindAccount(Savings.Number).Map(a => a.Balance);
-        Option<decimal> missing = FindAccount(new AccountNumber("00000000000")).Map(a => a.Balance);
+        Option<decimal> balance = FindAccount(Savings.Number).Map((Account a) => a.Balance);
+        Option<decimal> missing = FindAccount(new AccountNumber("00000000000")).Map((Account a) => a.Balance);
 
         balance.Should().Be(Option.Some(1_000m));
         missing.IsNone.Should().BeTrue();
@@ -140,7 +140,7 @@ public class BankingExamples
     [Fact]
     public void Option_WhereKeepsOnlyRichAccounts()
     {
-        Option<Account> Premium(AccountNumber n) => FindAccount(n).Where(a => a.Balance >= 500m);
+        Option<Account> Premium(AccountNumber n) => FindAccount(n).Where((Account a) => a.Balance >= 500m);
 
         Premium(Savings.Number).IsSome.Should().BeTrue();
         Premium(Checking.Number).IsNone.Should().BeTrue();
@@ -149,7 +149,7 @@ public class BankingExamples
     [Fact]
     public void Option_ZipCombinedBalance()
     {
-        Option<decimal> total = FindAccount(Savings.Number).Zip(FindAccount(Checking.Number), (a, b) => a.Balance + b.Balance);
+        Option<decimal> total = FindAccount(Savings.Number).Zip(FindAccount(Checking.Number), (Account a, Account b) => a.Balance + b.Balance);
 
         total.Should().Be(Option.Some(1_050m));
     }
@@ -194,10 +194,10 @@ public class BankingExamples
         using StringWriter log = new();
         Result<decimal, TransferError> balance = ParseAccountNumber(input)
             .Bind(GetAccount)
-            .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
-            .Bind(a => Withdraw(a, 100m))
-            .Tap(_ => log.WriteLine("Withdrawal completed"))
-            .Map(a => a.Balance);
+            .Ensure((Account a) => !a.Frozen, (Account a) => new TransferError.AccountFrozen(a.Number))
+            .Bind((Account a) => Withdraw(a, 100m))
+            .Tap((Account _) => log.WriteLine("Withdrawal completed"))
+            .Map((Account a) => a.Balance);
 
         if (succeeds)
         {
@@ -220,14 +220,14 @@ public class BankingExamples
     public void MapError_TranslatesToHttpStatusAtTheBoundary(string from, decimal amount, int expected)
     {
         int status = Transfer(from, "1234.56.78901", amount)
-            .MapError(error => error switch
+            .MapError((TransferError error) => error switch
             {
                 TransferError.AccountNotFound => 404,
                 TransferError.AccountFrozen => 423,
                 TransferError.InsufficientFunds => 409,
                 _ => 400,
             })
-            .Match(_ => 200, code => code);
+            .Match((Receipt _) => 200, (int code) => code);
 
         status.Should().Be(expected);
     }
@@ -242,7 +242,7 @@ public class BankingExamples
             : Validation.Valid<string, string>(owner.Trim());
 
     private static Validation<AccountNumber, string> ValidateNumber(string input) =>
-        ParseAccountNumber(input).ToValidation().MapErrors(_ => $"'{input}' is not an account number");
+        ParseAccountNumber(input).ToValidation().MapErrors((TransferError _) => $"'{input}' is not an account number");
 
     private static Validation<decimal, string> ValidateDeposit(decimal amount) =>
         amount >= 100m
@@ -251,7 +251,7 @@ public class BankingExamples
 
     private static Validation<AccountApplication, string> ValidateApplication(string owner, string number, decimal deposit) =>
         ValidateOwner(owner).Zip(ValidateNumber(number), ValidateDeposit(deposit),
-            (o, n, d) => new AccountApplication(o, n, d));
+            (string o, AccountNumber n, decimal d) => new AccountApplication(o, n, d));
 
     [Fact]
     public void Validation_AcceptsGoodApplication() =>
@@ -283,8 +283,8 @@ public class BankingExamples
         Result<AccountApplication, NonEmpty<string>> application = ValidateApplication("", "12", 500m).ToResult();
 
         string message = application
-            .Map(a => $"Welcome, {a.Owner}")
-            .Match(ok => ok, errors => string.Join("; ", errors));
+            .Map((AccountApplication a) => $"Welcome, {a.Owner}")
+            .Match((string ok) => ok, (NonEmpty<string> errors) => string.Join("; ", errors));
 
         message.Should().Be("Owner is required; '12' is not an account number");
     }
@@ -295,8 +295,8 @@ public class BankingExamples
         Validation<AccountApplication, string> rejection = ValidateApplication("", "12", 10m);
 
         string summary = rejection.Match(
-            _ => "Application accepted",
-            errors => $"{errors.Head} ({errors.Tail.Count} more problems)");
+            (AccountApplication _) => "Application accepted",
+            (NonEmpty<string> errors) => $"{errors.Head} ({errors.Tail.Count} more problems)");
 
         summary.Should().Be("Owner is required (2 more problems)");
         (rejection is Invalid<string>(var errors) && errors.Head == "Owner is required"
@@ -313,12 +313,13 @@ public class BankingExamples
 
     private static Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
         Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
-            .Map(ledger => ledger.Values.Sum(account => account.Balance));
+            .Map((IReadOnlyDictionary<AccountNumber, Account> ledger) =>
+                ledger.Values.Sum((Account account) => account.Balance));
 
     private static ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError>
         AuditedTransfer(string fromInput, string toInput, decimal amount) =>
-        new(ledger => Transfer(fromInput, toInput, amount, ledger)
-            .Map(receipt => new Writer<Receipt, TransferRecorded>(receipt,
+        new((IReadOnlyDictionary<AccountNumber, Account> ledger) => Transfer(fromInput, toInput, amount, ledger)
+            .Map((Receipt receipt) => new Writer<Receipt, TransferRecorded>(receipt,
                 [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
 
     [Fact]
@@ -329,7 +330,7 @@ public class BankingExamples
             new Payment(Seized.Number, 50m),
         ]);
 
-        batch.Map(payments => payments.Map(payment => payment.Amount).Sum())
+        batch.Map((NonEmpty<Payment> payments) => payments.Map((Payment payment) => payment.Amount).Sum())
             .Should().Be(Result.Ok<decimal, string>(250m));
         RequirePayments([]).Should().Be(
             Result.Error<NonEmpty<Payment>, string>("At least one payment is required"));
@@ -350,7 +351,9 @@ public class BankingExamples
     {
         Result<Writer<Receipt, TransferRecorded>, TransferError> result =
             AuditedTransfer("1234.56.78901", "1098.76.54321", 200m).Run(Ledger);
-        Writer<Receipt, TransferRecorded> audited = result.Match(value => value, error => throw new InvalidOperationException(error.ToString()));
+        Writer<Receipt, TransferRecorded> audited = result.Match(
+            (Writer<Receipt, TransferRecorded> value) => value,
+            (TransferError error) => throw new InvalidOperationException(error.ToString()));
         Receipt expected = new(Savings.Number, Checking.Number, 200m, 800m, 250m);
 
         audited.Value.Should().Be(expected);
@@ -397,10 +400,10 @@ public class BankingExamples
 
     private static Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency, TextWriter audit) =>
         ParseAccountNumber(input)
-            .BindAsync(n => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
-            .EnsureAsync(IsActiveAsync, a => new TransferError.AccountFrozen(a.Number))
-            .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency))
-            .TapAsync(_ => audit.WriteLineAsync("Balance converted"));
+            .BindAsync((AccountNumber n) => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
+            .EnsureAsync(IsActiveAsync, (Account a) => new TransferError.AccountFrozen(a.Number))
+            .MapAsync(async (Account a) => a.Balance * await ExchangeRateAsync(currency))
+            .TapAsync((decimal _) => audit.WriteLineAsync("Balance converted"));
 
     [Fact]
     public async Task Async_PipelineReadsLikeTheSyncOne()
