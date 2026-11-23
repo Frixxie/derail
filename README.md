@@ -297,6 +297,23 @@ one event with a `ValueTuple` result. Event inputs are snapshotted, and callers 
 The banking workflow only calculates a transfer proposal: it does not persist balances or publish
 events. Production code must coordinate persistence and event delivery separately.
 
+#### Which events survive a failure?
+
+Choose the outer type based on what the caller needs when a later step fails.
+The [stock reservation example](tests/Derail.Tests/WriterFailureExamples.cs) checks
+stock, then either proposes reserving one unit or returns `OutOfStock`:
+
+| Return type | Three units available | Out of stock |
+| --- | --- | --- |
+| `Writer<Result<int, ReservationError>, Step>` | `Ok(2)` with `[StockChecked, ReservationProposed]` | `Error(OutOfStock)` with `[StockChecked]` |
+| `Result<Writer<int, Step>, ReservationError>` | `Ok` containing `2` and the same two ordered events | `Error(OutOfStock)`; no writer or event list |
+
+Use the first shape for a trace of an attempt; use the second for a proposal the
+caller should receive only on success. A success-only caller can project a trace
+with `trace.Value.Map(value => trace.Map(_ => value))`. This keeps the original
+events on success and deliberately drops them on error. Once dropped, the trace
+cannot be reconstructed from the error alone. Neither shape publishes anything.
+
 ### Reader: compose computations with explicit dependencies
 
 ```csharp
