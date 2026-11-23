@@ -27,6 +27,14 @@ dotnet add package Derail
 using Derail;
 ```
 
+## Intended use
+
+Use `Result` for a sequence of dependent steps that should stop at the first expected failure. Use `Validation` when checks are independent and the caller needs every error.
+
+For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind(a => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
+
+Use `Ensure` to reject a successful value that fails a rule, and `Tap` for a synchronous observation such as recording a metric. An existing error skips both. If the step can return a failure that matters to the caller, use `Bind`; if it needs to be awaited, do not pass an async lambda to `Tap`.
+
 ## Quick tour
 
 The examples below come from [`BankingExamples.cs`](tests/Derail.Tests/BankingExamples.cs), where they run as tests.
@@ -62,13 +70,15 @@ Result<Account, TransferError> GetAccount(AccountNumber number) =>
     FindAccount(number).ToResult(TransferError () => new TransferError.AccountNotFound(number));
 ```
 
-Linear pipelines read well with `Bind` and `Map`:
+This pipeline records the account number only after a withdrawal succeeds:
 
 ```csharp
-var balance = ParseAccountNumber("1234.56.78901")
+var withdrawals = new List<AccountNumber>();
+var balance = ParseAccountNumber(input)
     .Bind(GetAccount)
-    .Bind(EnsureActive)
+    .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
     .Bind(a => Withdraw(a, 100m))
+    .Tap(a => withdrawals.Add(a.Number))
     .Map(a => a.Balance);
 ```
 
@@ -258,9 +268,9 @@ Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currenc
 | | `Option<T>` | `Result<T, TError>` | `Validation<T, TError>` |
 | --- | --- | --- | --- |
 | Create | `Option.Some`, `Option.None`, `Option.FromNullable` | `Result.Ok`, `Result.Error` | `Validation.Valid`, `Validation.Invalid` |
-| Inspect | `IsSome`, `IsNone` | `IsOk`, `IsError` | `IsValid`, `IsInvalid` |
+| Inspect | `IsSome`, `IsNone` | `IsOk`, `IsError`, `Tap` | `IsValid`, `IsInvalid` |
 | Transform | `Map`, `Where` | `Map`, `MapError` | `Map`, `MapErrors` |
-| Chain | `Bind`, LINQ | `Bind`, LINQ | — (use `ToResult`) |
+| Chain | `Bind`, LINQ | `Bind`, `Ensure`, LINQ | — (use `ToResult`) |
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply`, `Sequence` (all errors) |
 | Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |

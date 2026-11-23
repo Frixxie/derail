@@ -185,16 +185,30 @@ public class BankingExamples
         result.Should().Be(Result.Error<Receipt, TransferError>(new TransferError.MalformedAccountNumber("nope")));
     }
 
-    [Fact]
-    public void MethodSyntax_ForLinearPipelines()
+    [Theory]
+    [InlineData("1234.56.78901", true)]
+    [InlineData("1111.11.11111", false)] // Frozen
+    [InlineData("1098.76.54321", false)] // Insufficient funds
+    public void Withdrawal_RecordsOnlySuccessfulWithdrawals(string input, bool succeeds)
     {
-        var balance = ParseAccountNumber("1234.56.78901")
+        var withdrawals = new List<AccountNumber>();
+        var balance = ParseAccountNumber(input)
             .Bind(GetAccount)
-            .Bind(EnsureActive)
+            .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
             .Bind(a => Withdraw(a, 100m))
+            .Tap(a => withdrawals.Add(a.Number))
             .Map(a => a.Balance);
 
-        balance.Should().Be(Result.Ok<decimal, TransferError>(900m));
+        if (succeeds)
+        {
+            balance.Should().Be(Result.Ok<decimal, TransferError>(900m));
+            withdrawals.Should().Equal(Savings.Number);
+        }
+        else
+        {
+            balance.IsError.Should().BeTrue();
+            withdrawals.Should().BeEmpty();
+        }
     }
 
     [Theory]

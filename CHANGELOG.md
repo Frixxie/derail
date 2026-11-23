@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `Result.Tap` observes a successful value without changing the result. `Result.Ensure` checks a successful value and creates an error only if the predicate fails.
+
 ### Improvements
 
 - `Writer.Bind` (and `Zip`/LINQ `from` clauses) now appends events in constant time
