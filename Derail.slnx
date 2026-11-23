@@ -5,6 +5,9 @@
   <Folder Name="/src/">
     <Project Path="src/Derail/Derail.csproj" />
   </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/Orders/Orders.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Derail.Tests/Derail.Tests.csproj" />
   </Folder>

@@ -460,6 +460,9 @@ list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 
 ## Build, test and benchmark
 
+The [order shipment API](examples/Orders/README.md) shows how the primitives work
+together in ASP.NET Core, with PostgreSQL transactions and HTTP integration tests.
+
 ```sh
 dotnet build
 dotnet test --project tests/Derail.Tests
