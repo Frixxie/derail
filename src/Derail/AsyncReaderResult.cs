@@ -42,6 +42,14 @@ public sealed class AsyncReaderResult<TEnv, T, TError>
     public AsyncReaderResult<TEnv, T, TError> Ensure(Func<T, bool> predicate, Func<T, TError> errorFactory) =>
         new(async (env, token) => (await Run(env, token).ConfigureAwait(false)).Ensure(predicate, errorFactory));
 
+    /// <summary>Observes a successful value when run and preserves the result.</summary>
+    public AsyncReaderResult<TEnv, T, TError> Tap(Action<T> action) =>
+        new(async (env, token) => (await Run(env, token).ConfigureAwait(false)).Tap(action));
+
+    /// <summary>Observes a typed error when run and preserves the result.</summary>
+    public AsyncReaderResult<TEnv, T, TError> TapError(Action<TError> action) =>
+        new((env, token) => Run(env, token).TapError(action));
+
     /// <summary>Runs left to right, skipping the second computation if the first fails.</summary>
     public AsyncReaderResult<TEnv, TResult, TError> Zip<TOther, TResult>(AsyncReaderResult<TEnv, TOther, TError> other, Func<T, TOther, TResult> combine) =>
         Bind(left => other.Map(right => combine(left, right)));
@@ -73,6 +81,22 @@ public static class AsyncReaderResult
     /// <summary>Lifts an already computed result without changing its case.</summary>
     public static AsyncReaderResult<TEnv, T, TError> FromResult<TEnv, T, TError>(Result<T, TError> result) =>
         new((_, _) => Task.FromResult(result));
+
+    /// <summary>Runs an infallible asynchronous step on each execution and succeeds with its value.</summary>
+    public static AsyncReaderResult<TEnv, T, TError> FromTask<TEnv, T, TError>(Func<TEnv, CancellationToken, Task<T>> run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return new(async (env, token) => Result.Ok<T, TError>(await run(env, token).ConfigureAwait(false)));
+    }
+
+    /// <summary>Runs the optional lookup on each execution. Creates an error only when that lookup returns None.</summary>
+    public static AsyncReaderResult<TEnv, T, TError> FromLookup<TEnv, T, TError>(
+        Func<TEnv, CancellationToken, Task<Option<T>>> lookup, Func<TError> whenNone)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+        ArgumentNullException.ThrowIfNull(whenNone);
+        return new((env, token) => lookup(env, token).ToResult(whenNone));
+    }
 
     /// <summary>Runs the synchronous reader in the supplied environment on each execution.</summary>
     public static AsyncReaderResult<TEnv, T, TError> FromReaderResult<TEnv, T, TError>(ReaderResult<TEnv, T, TError> reader)

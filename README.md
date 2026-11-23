@@ -490,6 +490,8 @@ var totalQuantity = new AsyncReaderResult<IAsyncEnumerable<int>, long, string>(a
 | --- | --- | --- |
 | An already computed `Result<T, E>` | `ReaderResult.FromResult<TEnv, T, E>(result)` | Returns the same success or error in every environment; the original operation is not repeated. |
 | An environment lookup returning `Option<T>` | `ReaderResult.FromLookup(lookup, whenNone)` | Calls the lookup once per run. `Some(null)` is a success; only `None` calls the error factory. |
+| An async lookup returning `Task<Option<T>>` | `AsyncReaderResult.FromLookup(lookup, whenNone)` | Awaits the lookup once per run with the environment and token; only `None` calls the error factory. |
+| An async operation that has no domain error, such as a write | `AsyncReaderResult.FromTask<TEnv, T, E>((env, token) => ...)` | Awaits it once per run and succeeds with its value. Exceptions and cancellation still propagate. |
 | An infallible `Reader` needed in an async fallible workflow | `AsyncReaderResult.FromReaderResult(ReaderResult.FromReader<TEnv, T, E>(reader))` | Runs the synchronous reader with the supplied environment; lifting it does not schedule background work. |
 | An existing `Writer<T, E>` needed in an ordinary reader | `Reader.Pure<TEnv, Writer<T, E>>(writer)` | Returns the writer itself, with its ordered events intact. Lifting only `writer.Value` discards those events. |
 

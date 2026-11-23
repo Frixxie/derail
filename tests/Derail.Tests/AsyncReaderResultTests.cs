@@ -104,6 +104,55 @@ public class AsyncReaderResultTests
         Assert.Equal(1, calls);
     }
 
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(-2, false)]
+    public async Task FromLookup_creates_the_error_only_when_the_lookup_is_absent(int env, bool present)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var errors = 0;
+        var lookup = AsyncReaderResult.FromLookup<int, int, string>(
+            (value, received) =>
+            {
+                Assert.Equal(token, received);
+                return Task.FromResult(value > 0 ? Option.Some(value * 10) : Option.None);
+            },
+            () => { errors++; return "missing"; });
+
+        var result = await lookup.Run(env, token);
+
+        Assert.Equal(present ? Result.Ok<int, string>(env * 10) : Result.Error<int, string>("missing"), result);
+        Assert.Equal(present ? 0 : 1, errors);
+    }
+
+    [Fact]
+    public async Task FromTask_always_succeeds_with_the_awaited_value()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var step = AsyncReaderResult.FromTask<int, int, string>((env, received) =>
+        {
+            Assert.Equal(token, received);
+            return Task.FromResult(env + 1);
+        });
+
+        Assert.Equal(Result.Ok<int, string>(42), await step.Run(41, token));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public async Task Tap_and_TapError_observe_only_their_case_and_preserve_the_result(int env)
+    {
+        var seen = new List<string>();
+        var source = Lookup(e => e > 0 ? e : null);
+
+        var result = await source.Tap(value => seen.Add($"ok {value}")).TapError(error => seen.Add(error))
+            .Run(env, TestContext.Current.CancellationToken);
+
+        Assert.Equal(await source.Run(env, TestContext.Current.CancellationToken), result);
+        Assert.Equal([env > 0 ? $"ok {env}" : "missing"], seen);
+    }
+
     [Property]
     public async Task<bool> Map_identity_and_composition(int env, Func<int, int?> lookup, Func<int, int> f, Func<int, int> g)
     {

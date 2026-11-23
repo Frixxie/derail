@@ -46,6 +46,9 @@
   Calls that passed a `NonEmpty<T>` and stored the result as `IReadOnlyList<T>` now need
   `.Map(values => (IReadOnlyList<T>)values)` or an `IEnumerable<T>`-typed argument.
 
+- Added `AsyncReaderResult.FromLookup` for async optional lookups, `AsyncReaderResult.FromTask`
+  for steps without a domain error, and `Tap` and `TapError` on `AsyncReaderResult`.
+
 - `Task` combinators now follow the same await policy as `ValueTask` combinators.
   Callbacks after pending inputs no longer request the caller's synchronization
   context. If a callback updates a UI, dispatch that update to the UI thread.
