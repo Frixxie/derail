@@ -29,8 +29,11 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
     public int Count => 1 + _tail.Length;
 
     /// <summary>Gets the element at a zero-based index; index zero returns the head.</summary>
-    /// <exception cref="IndexOutOfRangeException">The index is negative or at least <see cref="Count"/>.</exception>
-    public T this[int index] => index == 0 ? Head : _tail[index - 1];
+    /// <exception cref="ArgumentOutOfRangeException">The index is negative or at least <see cref="Count"/>.</exception>
+    public T this[int index] =>
+        index == 0 ? Head
+        : (uint)(index - 1) < (uint)_tail.Length ? _tail[index - 1]
+        : throw new ArgumentOutOfRangeException(nameof(index), index, $"The index must be between 0 and {Count - 1}.");
 
     // Let batch validation collect errors without allocating an enumerator per failed item.
     internal void CopyTo(ImmutableArray<T>.Builder destination)

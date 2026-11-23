@@ -60,7 +60,7 @@ public class NonEmptyTests
 
         var act = () => values[index];
 
-        act.Should().Throw<IndexOutOfRangeException>();
+        act.Should().Throw<ArgumentOutOfRangeException>().Which.ParamName.Should().Be("index");
     }
 
     [Fact]

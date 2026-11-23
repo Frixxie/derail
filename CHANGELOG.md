@@ -39,6 +39,9 @@
   key. For identity comparisons use `ReferenceEquals`; for identity-based keys
   pass `ReferenceEqualityComparer.Instance` to the dictionary or set constructor.
 
+- **Breaking:** `NonEmpty<T>`'s indexer throws `ArgumentOutOfRangeException` instead of
+  `IndexOutOfRangeException` for an index outside the collection.
+
 - `Task` combinators now follow the same await policy as `ValueTask` combinators.
   Callbacks after pending inputs no longer request the caller's synchronization
   context. If a callback updates a UI, dispatch that update to the UI thread.
