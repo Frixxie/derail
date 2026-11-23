@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DbReader;
 using Derail;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 namespace Orders;
@@ -12,7 +13,7 @@ internal sealed record NewOrderLine(string Sku, int Quantity);
 internal sealed record Order(long Id, string Description, IEnumerable<OrderLine> Lines);
 internal sealed record OrderLine(long Id, string Sku, int Quantity);
 internal sealed record OrderPage(int Limit, long After, Option<bool> Shipped);
-internal enum OrderError { NotFound }
+internal enum OrderError { NotFound, KeyReused }
 
 internal static class OrderEndpoints
 {
@@ -28,8 +29,10 @@ internal static class OrderEndpoints
     public static Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token) =>
         Find(id).InTransaction(db, token).Match(order => Results.Ok(order), Problem);
 
-    public static Task<IResult> Create(OrderRequest request, NpgsqlDataSource db, CancellationToken token) =>
-        Validate(request).OnValid(order => Insert(order)
+    public static Task<IResult> Create(OrderRequest request, [FromHeader(Name = "Idempotency-Key")] string? key,
+        NpgsqlDataSource db, CancellationToken token) =>
+        Validate(request).OnValid(order => Insert(order, key)
+            .Recover(usedKey => Replay(usedKey, order))
             .Bind(Find)
             .InTransaction(db, token)
             .Match(created => Results.Created($"/orders/{created.Id}", created), Problem));
@@ -81,21 +84,36 @@ internal static class OrderEndpoints
         """;
 
     private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> Find(long id) =>
+        FindWhere("id = @Id", new { id });
+
+    private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> FindWhere(string condition, object arguments) =>
         new(async (connection, token) =>
         {
-            var orders = await connection.ReadAsync<Order>(token, SelectOrders("SELECT * FROM orders WHERE id = @Id"), new { id });
+            var orders = await connection.ReadAsync<Order>(token, SelectOrders($"SELECT * FROM orders WHERE {condition}"), arguments);
             return Option.FromNullable(orders.SingleOrDefault()).ToResult(() => OrderError.NotFound);
         });
 
-    private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Insert(NewOrder order) =>
+    // Fails with the idempotency key when an order already uses it.
+    private static AsyncReaderResult<NpgsqlConnection, long, string> Insert(NewOrder order, string? key) =>
         new(async (connection, token) =>
         {
-            var ids = await connection.ReadAsync<long>(token,
-                "INSERT INTO orders (description) VALUES (@Description) RETURNING id", new { order.Description });
-            var id = ids.Single();
-            await InsertLines(connection, id, order.Lines, token);
-            return Result.Ok<long, OrderError>(id);
+            var ids = (await connection.ReadAsync<long>(token, """
+                INSERT INTO orders (description, idempotency_key) VALUES (@Description, @Key)
+                ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
+                """, new { order.Description, key })).ToList();
+            // Only a supplied key can conflict.
+            if (ids.Count == 0) return Result.Error<long, string>(key!);
+            await InsertLines(connection, ids[0], order.Lines, token);
+            return Result.Ok<long, string>(ids[0]);
         });
+
+    // A retry with the same key and order gets the original order; a different order is rejected.
+    private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replay(string key, NewOrder order) =>
+        FindWhere("idempotency_key = @Key", new { key })
+            .Ensure(existing => existing.Description == order.Description
+                    && existing.Lines.Select(line => new NewOrderLine(line.Sku, line.Quantity)).SequenceEqual(order.Lines),
+                _ => OrderError.KeyReused)
+            .Map(existing => existing.Id);
 
     private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replace(long id, NewOrder order) =>
         new(async (connection, token) =>
@@ -118,6 +136,7 @@ internal static class OrderEndpoints
     private static IResult Problem(OrderError error) => error switch
     {
         OrderError.NotFound => ApiResults.NotFound("order-not-found"),
+        OrderError.KeyReused => ApiResults.Problem(StatusCodes.Status422UnprocessableEntity, "idempotency-key-reused"),
         _ => throw new UnreachableException(),
     };
 }

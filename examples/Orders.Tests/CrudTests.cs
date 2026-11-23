@@ -134,6 +134,27 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         }, await Errors(response));
     }
 
+    [Fact]
+    public async Task Retrying_a_create_with_the_same_idempotency_key_returns_the_first_order()
+    {
+        var token = TestContext.Current.CancellationToken;
+        Task<HttpResponseMessage> Create(object body) => api.Client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/orders")
+        {
+            Content = JsonContent.Create(body),
+            Headers = { { "Idempotency-Key", "retry-1" } },
+        }, token);
+
+        var first = await Create(new { description = "Sample", lines = OneLine });
+        var retry = await Create(new { description = " Sample ", lines = OneLine });
+        var reused = await Create(new { description = "Other", lines = OneLine });
+
+        Assert.Equal((HttpStatusCode.Created, HttpStatusCode.Created), (first.StatusCode, retry.StatusCode));
+        Assert.Equal(first.Headers.Location, retry.Headers.Location);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
+        var problem = await reused.Content.ReadFromJsonAsync<JsonElement>(token);
+        Assert.Equal("idempotency-key-reused", problem.GetProperty("code").GetString());
+    }
+
     private static async Task<Dictionary<string, string[]>?> Errors(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

@@ -7,7 +7,7 @@ An order has a description, one or more lines and, optionally, one shipment. Cre
 | Order | `POST /orders` | `GET /orders` or `GET /orders/{id}` | `PUT /orders/{id}` | `DELETE /orders/{id}` |
 | Shipment | `PUT /orders/{id}/shipment` | `GET /orders/{id}/shipment` | `PUT /orders/{id}/shipment` | `DELETE /orders/{id}/shipment` |
 
-Creating an order returns `201` and a `Location` header. Each line has a `sku` and a positive `quantity`; updating an order replaces its description and lines. `GET /orders` accepts optional `limit` (1–100, default 50), `after` (return IDs greater than this) and `shipped` (`true` or `false`) query parameters. Putting a shipment returns `200` with the saved carrier and tracking number. The first shipment records an `order-shipped` event, a different one records `shipment-changed`, and repeating it records nothing. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
+Creating an order returns `201` and a `Location` header. With an `Idempotency-Key` header, a retry with the same order returns the original `201`, while a different order with that key returns `422`. Each line has a `sku` and a positive `quantity`; updating an order replaces its description and lines. `GET /orders` accepts optional `limit` (1–100, default 50), `after` (return IDs greater than this) and `shipped` (`true` or `false`) query parameters. Putting a shipment returns `200` with the saved carrier and tracking number. The first shipment records an `order-shipped` event, a different one records `shipment-changed`, and repeating it records nothing. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
 
 ## How it uses Derail
 
@@ -18,6 +18,7 @@ Creating an order returns `201` and a `Location` header. Each line has a `sku` a
 - Optional query parameters are parsed into an `Option`: `GetValueOrDefault` supplies a default, and `Match` turns `shipped` into an optional SQL filter.
 - Shipment changes are [`AsyncReaderResult` steps](ShipmentEndpoints.cs) sharing one connection: `Lock` reads the order `FOR UPDATE`, `Ensure` applies the delivery rule, and `Bind` runs the write. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success.
 - A `ShipmentError` says why a step failed, and one `switch` maps it to `404` or `409`.
+- Creating an order `Recover`s from a used idempotency key. The insert step fails with that key, and `Replay` returns the stored order or a `KeyReused` error, so the error type changes from `string` to `OrderError`.
 - [`Shipping.Ship`](Shipping.cs) is a pure function that returns the shipment as a `Writer` with the events it implies. The `Save` step writes the shipment and its events in the same transaction.
 
 ## Try it
