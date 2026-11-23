@@ -200,6 +200,45 @@ public class ResultTests
             Assert.Throws<FormatException>(() => Parse("42").Tap(_ => throw new FormatException()));
     }
 
+    public class Ensure
+    {
+        [Fact]
+        public void PassingValueIsTestedOnceAndPreserved()
+        {
+            var tested = new List<int>();
+            var result = Parse("42");
+            result.Ensure(x => { tested.Add(x); return x > 0; }, _ => throw new InvalidOperationException())
+                .Should().Be(result);
+            tested.Should().Equal(42);
+        }
+
+        [Fact]
+        public void RejectedValueCreatesOneErrorAndStopsPipeline()
+        {
+            var rejected = new List<int>();
+            Parse("-1").Ensure(x => x > 0, x => { rejected.Add(x); return $"Rejected {x}"; })
+                .Tap(_ => throw new InvalidOperationException())
+                .Should().Be(Result.Error<int, string>("Rejected -1"));
+            rejected.Should().Equal(-1);
+        }
+
+        [Fact]
+        public void ExistingErrorSkipsBothCallbacks() =>
+            Failed.Ensure(_ => throw new InvalidOperationException(), _ => throw new InvalidOperationException())
+                .Should().Be(Failed);
+
+        [Fact]
+        public void RejectsUninitializedResult() =>
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => default(Result<int, string>).Ensure(_ => true, _ => "error"));
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void PropagatesCallbackExceptions(bool predicateThrows) =>
+            Assert.Throws<FormatException>(() => Parse("42").Ensure(
+                _ => predicateThrows ? throw new FormatException() : false, _ => throw new FormatException()));
+    }
+
     public class GetValueOrDefault
     {
         [Fact]

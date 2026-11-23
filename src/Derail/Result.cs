@@ -73,6 +73,14 @@ public static class ResultExtensions
             }
         }
 
+        /// <summary>Preserves the result unless a success value fails the predicate, then creates an error from that value.</summary>
+        public Result<T, TError> Ensure(Func<T, bool> predicate, Func<T, TError> errorFactory) =>
+            result switch
+            {
+                Ok<T>(var value) => predicate(value) ? result : new Error<TError>(errorFactory(value)),
+                Error<TError> => result,
+            };
+
         /// <summary>Returns the success value, or <paramref name="fallback"/> on failure.</summary>
         public T GetValueOrDefault(T fallback) =>
             result switch
