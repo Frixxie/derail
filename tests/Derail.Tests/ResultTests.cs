@@ -176,6 +176,30 @@ public class ResultTests
             Parse("4").Bind(Result.Ok<int, string>).Should().Be(Parse("4"));
     }
 
+    public class Tap
+    {
+        [Fact]
+        public void ObservesOkOnceAndPreservesIt()
+        {
+            var seen = new List<int>();
+            var result = Parse("42");
+            result.Tap(seen.Add).Should().Be(result);
+            seen.Should().Equal(42);
+        }
+
+        [Fact]
+        public void SkipsError() =>
+            Failed.Tap(_ => throw new InvalidOperationException()).Should().Be(Failed);
+
+        [Fact]
+        public void RejectsUninitializedResult() =>
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => default(Result<int, string>).Tap(_ => { }));
+
+        [Fact]
+        public void PropagatesActionException() =>
+            Assert.Throws<FormatException>(() => Parse("42").Tap(_ => throw new FormatException()));
+    }
+
     public class GetValueOrDefault
     {
         [Fact]

@@ -58,6 +58,21 @@ public static class ResultExtensions
         public Result<TResult, TError> Bind<TResult>(Func<T, Result<TResult, TError>> bind) =>
             result.Match(bind, Result.Error<TResult, TError>);
 
+        /// <summary>Runs a synchronous action on success and returns the original result.</summary>
+        public Result<T, TError> Tap(Action<T> action)
+        {
+            switch (result)
+            {
+                case Ok<T>(var value):
+                    action(value);
+                    return result;
+                case Error<TError>:
+                    return result;
+                default:
+                    throw new System.Runtime.CompilerServices.SwitchExpressionException(result);
+            }
+        }
+
         /// <summary>Returns the success value, or <paramref name="fallback"/> on failure.</summary>
         public T GetValueOrDefault(T fallback) =>
             result switch
