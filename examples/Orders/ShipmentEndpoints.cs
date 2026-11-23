@@ -1,4 +1,5 @@
 using DbReader;
+using Derail;
 using Npgsql;
 
 namespace Orders;
@@ -14,7 +15,7 @@ internal static class ShipmentEndpoints
             .OnValid(async shipment =>
             {
                 var result = await Save(db, id, shipment, token);
-                return result.Match(value => Results.Ok(value), () => ApiInput.NotFound("order-not-found"));
+                return result.OkOrNotFound("order-not-found");
             });
 
     private static async Task<Option<Shipment>> Save(
@@ -36,7 +37,7 @@ internal static class ShipmentEndpoints
         await using var connection = await db.OpenConnectionAsync(token);
         var rows = await connection.ReadAsync<Shipment>(token,
             "SELECT carrier, tracking FROM orders WHERE id = @Id AND carrier IS NOT NULL", new { id });
-        return rows.SingleOrDefault() is { } shipment ? Results.Ok(shipment) : ApiInput.NotFound("shipment-not-found");
+        return Option.FromNullable(rows.SingleOrDefault()).OkOrNotFound("shipment-not-found");
     }
 
     public static async Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token)
@@ -44,6 +45,6 @@ internal static class ShipmentEndpoints
         await using var connection = await db.OpenConnectionAsync(token);
         var count = await connection.ExecuteAsync(token,
             "UPDATE orders SET carrier = NULL, tracking = NULL WHERE id = @Id AND carrier IS NOT NULL", new { id });
-        return count == 1 ? Results.NoContent() : ApiInput.NotFound("shipment-not-found");
+        return count == 1 ? Results.NoContent() : ApiResults.NotFound("shipment-not-found");
     }
 }

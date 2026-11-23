@@ -9,7 +9,7 @@ An order has a description and, optionally, one shipment. Create an order first,
 
 Creating an order returns `201` and a `Location` header. Putting a shipment returns `200` with the saved carrier and tracking number; repeating or replacing it records no extra `order-shipped` event. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
 
-The [order handlers](OrderEndpoints.cs) use DbReader directly. In the [shipment handlers](ShipmentEndpoints.cs), `Validation.Zip` checks both fields before writing and `Option` distinguishes a saved shipment from a missing order.
+[Field validation](ApiInput.cs) uses `Result.Ensure` to report the first failed rule for each field. The [shipment handler](ShipmentEndpoints.cs) uses `Validation.Zip` so a single `400` can report errors for both carrier and tracking. For single-row lookups, the [order](OrderEndpoints.cs) and shipment handlers use `Option` to distinguish a returned row from a missing resource; [`Match` maps those cases to `200` and `404`](ApiResults.cs).
 
 ## Try it
 

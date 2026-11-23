@@ -1,4 +1,5 @@
 using DbReader;
+using Derail;
 using Npgsql;
 
 namespace Orders;
@@ -18,7 +19,7 @@ internal static class OrderEndpoints
     {
         await using var connection = await db.OpenConnectionAsync(token);
         var rows = await connection.ReadAsync<Order>(token, "SELECT id, description FROM orders WHERE id = @Id", new { id });
-        return rows.SingleOrDefault() is { } order ? Results.Ok(order) : ApiInput.NotFound("order-not-found");
+        return Option.FromNullable(rows.SingleOrDefault()).OkOrNotFound("order-not-found");
     }
 
     public static Task<IResult> Create(OrderRequest request, NpgsqlDataSource db, CancellationToken token) =>
@@ -37,13 +38,13 @@ internal static class OrderEndpoints
         await using var connection = await db.OpenConnectionAsync(token);
         var rows = await connection.ReadAsync<Order>(token,
             "UPDATE orders SET description = @Description WHERE id = @Id RETURNING id, description", new { id, description });
-        return rows.SingleOrDefault() is { } order ? Results.Ok(order) : ApiInput.NotFound("order-not-found");
+        return Option.FromNullable(rows.SingleOrDefault()).OkOrNotFound("order-not-found");
     });
 
     public static async Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token)
     {
         await using var connection = await db.OpenConnectionAsync(token);
         var count = await connection.ExecuteAsync(token, "DELETE FROM orders WHERE id = @Id", new { id });
-        return count == 1 ? Results.NoContent() : ApiInput.NotFound("order-not-found");
+        return count == 1 ? Results.NoContent() : ApiResults.NotFound("order-not-found");
     }
 }
