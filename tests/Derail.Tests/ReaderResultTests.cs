@@ -92,6 +92,27 @@ public class ReaderResultTests
     }
 
     [Property]
+    public bool Map_Identity(Func<int, int?> lookup, int environment)
+    {
+        var reader = new ReaderResult<int, int, string>(env => Option.FromNullable(lookup(env)).ToResult(() => "missing"));
+        return reader.Map(x => x).Run(environment).Equals(reader.Run(environment));
+    }
+
+    [Property]
+    public bool Map_Composition(Func<int, int?> lookup, int environment, Func<int, int> f, Func<int, int> g)
+    {
+        var reader = new ReaderResult<int, int, string>(env => Option.FromNullable(lookup(env)).ToResult(() => "missing"));
+        return reader.Map(f).Map(g).Run(environment).Equals(reader.Map(x => g(f(x))).Run(environment));
+    }
+
+    [Property]
+    public bool Bind_LeftIdentity(int value, int environment, Func<int, int?> lookup)
+    {
+        ReaderResult<int, int, string> Next(int x) => new(env => Option.FromNullable(lookup(env + x)).ToResult(() => "missing"));
+        return ReaderResult.Pure<int, int, string>(value).Bind(Next).Run(environment).Equals(Next(value).Run(environment));
+    }
+
+    [Property]
     public bool Bind_RightIdentity(bool ok, int value, int environment)
     {
         var result = ok ? Result.Ok<int, string>(value) : Result.Error<int, string>("failed");

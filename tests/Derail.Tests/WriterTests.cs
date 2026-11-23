@@ -43,6 +43,15 @@ public class WriterTests
     }
 
     [Property]
+    public bool Map_Composition(int value, int[] events, Func<int, int> f, Func<int, int> g)
+    {
+        var writer = new Writer<int, int>(value, events);
+        var left = writer.Map(f).Map(g);
+        var right = writer.Map(x => g(f(x)));
+        return left.Value == right.Value && left.Events.SequenceEqual(right.Events);
+    }
+
+    [Property]
     public bool Bind_RightIdentity(int value, int[] events)
     {
         var writer = new Writer<int, int>(value, events).Bind(Writer.Pure<int, int>);

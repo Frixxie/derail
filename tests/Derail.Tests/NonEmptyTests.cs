@@ -163,6 +163,22 @@ public class NonEmptyTests
     }
 
     [Property]
+    public bool Map_Identity(int? head, int?[] tail)
+    {
+        var values = new NonEmpty<int?>(head, tail);
+        return values.Map(x => x) == values;
+    }
+
+    [Property]
+    public bool Append_Associativity(NonEmptyArray<int> a, NonEmptyArray<int> b, NonEmptyArray<int> c)
+    {
+        var left = new NonEmpty<int>(a.Get[0], a.Get.AsSpan(1));
+        var middle = new NonEmpty<int>(b.Get[0], b.Get.AsSpan(1));
+        var right = new NonEmpty<int>(c.Get[0], c.Get.AsSpan(1));
+        return left.Append(middle).Append(right) == left.Append(middle.Append(right));
+    }
+
+    [Property]
     public bool Append_PreservesBothInputs(int first, int[] leftTail, int second, int[] rightTail)
     {
         var left = new NonEmpty<int>(first, leftTail);

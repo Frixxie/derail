@@ -5,6 +5,17 @@ namespace Derail.Tests;
 public class AsyncProperties
 {
     [Property]
+    public async Task<bool> Result_MapAndBind_AgreeAcrossSyncTaskAndValueTask(bool ok, int value, Func<int, int> map, Func<int, int?> lookup)
+    {
+        var source = ok ? Result.Ok<int, string>(value) : Result.Error<int, string>("upstream");
+        Result<int, string> Next(int x) => Option.FromNullable(lookup(x)).ToResult(() => "missing");
+        var expected = source.Map(map).Bind(Next);
+        var task = await source.MapAsync(x => Task.FromResult(map(x))).BindAsync(x => Task.FromResult(Next(x)));
+        var valueTask = await source.MapAsync(x => ValueTask.FromResult(map(x))).BindAsync(x => ValueTask.FromResult(Next(x)));
+        return expected.Equals(task) && expected.Equals(valueTask);
+    }
+
+    [Property]
     public async Task<bool> Option_BindAsync_AgreesWithBind(bool present, int value, int minimum)
     {
         Option<int> source = present ? Option.Some(value) : default(Option<int>);

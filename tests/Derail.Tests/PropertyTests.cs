@@ -6,6 +6,36 @@ namespace Derail.Tests;
 
 public class ResultProperties
 {
+    private static Result<T, string> Pure<T>(T value) => Result.Ok<T, string>(value);
+
+    [Property]
+    public bool Apply_Identity(bool ok, int value, string error)
+    {
+        var source = Make(ok, value, error);
+        return Pure<Func<int, int>>(x => x).Apply(source).Equals(source);
+    }
+
+    [Property]
+    public bool Apply_Homomorphism(Func<int, int> f, int x) =>
+        Pure(f).Apply(Pure(x)).Equals(Pure(f(x)));
+
+    [Property]
+    public bool Apply_Interchange(bool ok, Func<int, int> f, int x)
+    {
+        var u = ok ? Pure(f) : Result.Error<Func<int, int>, string>("u");
+        return u.Apply(Pure(x)).Equals(Pure<Func<Func<int, int>, int>>(g => g(x)).Apply(u));
+    }
+
+    [Property]
+    public bool Apply_Composition(bool firstOk, bool secondOk, bool valueOk, Func<int, int> f, Func<int, int> g, int x)
+    {
+        var u = firstOk ? Pure(f) : Result.Error<Func<int, int>, string>("first");
+        var v = secondOk ? Pure(g) : Result.Error<Func<int, int>, string>("second");
+        var w = Make(valueOk, x, "value");
+        Func<Func<int, int>, Func<Func<int, int>, Func<int, int>>> compose = a => b => n => a(b(n));
+        return Pure(compose).Apply(u).Apply(v).Apply(w).Equals(u.Apply(v.Apply(w)));
+    }
+
     private static Result<int, string> Make(bool ok, int value, string error) =>
         ok ? Result.Ok<int, string>(value) : Result.Error<int, string>(error);
 
@@ -37,6 +67,64 @@ public class ResultProperties
 
 public class OptionProperties
 {
+    [Property]
+    public bool Apply_Identity(bool some, int x)
+    {
+        var source = Make(some, x);
+        return Option.Some<Func<int, int>>(n => n).Apply(source).Equals(source);
+    }
+
+    [Property]
+    public bool Apply_Homomorphism(Func<int, int> f, int x) =>
+        Option.Some(f).Apply(Option.Some(x)).Equals(Option.Some(f(x)));
+
+    [Property]
+    public bool Apply_Interchange(bool some, Func<int, int> f, int x)
+    {
+        Option<Func<int, int>> u = some ? Option.Some(f) : Option.None;
+        return u.Apply(Option.Some(x)).Equals(Option.Some<Func<Func<int, int>, int>>(g => g(x)).Apply(u));
+    }
+
+    [Property]
+    public bool Apply_Composition(bool firstSome, bool secondSome, bool valueSome, Func<int, int> f, Func<int, int> g, int x)
+    {
+        Option<Func<int, int>> u = firstSome ? Option.Some(f) : Option.None;
+        Option<Func<int, int>> v = secondSome ? Option.Some(g) : Option.None;
+        var w = Make(valueSome, x);
+        Func<Func<int, int>, Func<Func<int, int>, Func<int, int>>> compose = a => b => n => a(b(n));
+        return Option.Some(compose).Apply(u).Apply(v).Apply(w).Equals(u.Apply(v.Apply(w)));
+    }
+
+    [Property]
+    public bool Map_Composition(bool some, int x, Func<int, int> f, Func<int, int> g)
+    {
+        var source = Make(some, x);
+        return source.Map(f).Map(g).Equals(source.Map(n => g(f(n))));
+    }
+
+    [Property]
+    public bool Bind_LeftIdentity(int x, Func<int, int?> f)
+    {
+        Option<int> Next(int n) => Option.FromNullable(f(n));
+        return Option.Some(x).Bind(Next).Equals(Next(x));
+    }
+
+    [Property]
+    public bool Bind_RightIdentity(bool present, int? x)
+    {
+        Option<int?> source = present ? Option.Some(x) : default(Option<int?>);
+        return source.Bind(Option.Some).Equals(source);
+    }
+
+    [Property]
+    public bool Bind_Associativity(bool some, int x, Func<int, int?> f, Func<int, int?> g)
+    {
+        var source = Make(some, x);
+        Option<int> First(int n) => Option.FromNullable(f(n));
+        Option<int> Second(int n) => Option.FromNullable(g(n));
+        return source.Bind(First).Bind(Second).Equals(source.Bind(n => First(n).Bind(Second)));
+    }
+
     [Property]
     public bool Some_RoundTripsNullablePayload_AndIsDistinctFromNone(int? payload)
     {

@@ -41,6 +41,13 @@ public class ReaderTests
     }
 
     [Property]
+    public bool Map_Identity(Func<int, int> compute, int environment)
+    {
+        var reader = new Reader<int, int>(compute);
+        return reader.Map(x => x).Run(environment) == reader.Run(environment);
+    }
+
+    [Property]
     public bool Map_Composition(int environment) =>
         Reader.Ask<int>().Map(x => x + 1).Map(x => x * 2).Run(environment)
         == Reader.Ask<int>().Map(x => (x + 1) * 2).Run(environment);
