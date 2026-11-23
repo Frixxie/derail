@@ -21,6 +21,7 @@ internal static class Shipping
     {
         null or "" => Validation.Invalid<string, FieldError>(new(name, "required")),
         var text when text.Length > maxLength => Validation.Invalid<string, FieldError>(new(name, "too-long")),
+        var text when text.Contains('\0') => Validation.Invalid<string, FieldError>(new(name, "invalid-character")),
         var text => Validation.Valid<string, FieldError>(text),
     };
 

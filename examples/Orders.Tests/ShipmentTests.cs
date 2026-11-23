@@ -10,14 +10,17 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
 {
     private static readonly object Requested = new { carrier = "Parcel", tracking = "SYN-001" };
 
-    [Fact]
-    public async Task Every_invalid_field_is_reported_before_the_order_is_read()
+    [Theory]
+    [InlineData(" ", "", "required", "required")]
+    [InlineData("Par\0cel", "SYN-\0", "invalid-character", "invalid-character")]
+    public async Task Every_invalid_field_is_reported_before_the_order_is_read(
+        string carrier, string tracking, string carrierError, string trackingError)
     {
-        var response = await api.Ship(100, new { carrier = " ", tracking = "" });
+        var response = await api.Ship(100, new { carrier, tracking });
 
         var problem = await Problem(response, HttpStatusCode.BadRequest);
         var errors = problem.GetProperty("errors").Deserialize<Dictionary<string, string[]>>();
-        Assert.Equal(new Dictionary<string, string[]> { ["carrier"] = ["required"], ["tracking"] = ["required"] }, errors);
+        Assert.Equal(new Dictionary<string, string[]> { ["carrier"] = [carrierError], ["tracking"] = [trackingError] }, errors);
     }
 
     [Fact]

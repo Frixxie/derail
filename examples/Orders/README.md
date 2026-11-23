@@ -41,7 +41,7 @@ Remove the database with `docker compose -f examples/Orders/compose.yaml down --
 | Outcome | HTTP contract |
 | --- | --- |
 | Shipment recorded, or same shipment replayed | `200` with the normalized `{carrier, tracking}`; one event in total |
-| Missing/blank or over-length fields | `400` validation problem; `errors` maps field names to `required` or `too-long` |
+| Missing/blank, over-length, or NUL-containing fields | `400` validation problem; `errors` maps field names to `required`, `too-long`, or `invalid-character` |
 | Order does not exist | `404` problem with `code: order-not-found` |
 | A different shipment already exists | `409` problem with `code: already-shipped` |
 | Database command fails | Generic `500` problem; transaction rolls back |
