@@ -99,6 +99,41 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal(new Dictionary<string, string[]> { ["lines"] = ["required"] }, await Errors(response));
     }
 
+    [Fact]
+    public async Task Order_list_pages_after_an_id_and_filters_by_shipment()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var ids = new List<long>();
+        foreach (var description in new[] { "First", "Second", "Third" })
+        {
+            var created = await api.Client.PostAsJsonAsync("/orders", new { description, lines = OneLine }, token);
+            ids.Add(Assert.IsType<Order>(await created.Content.ReadFromJsonAsync<Order>(token)).Id);
+        }
+        await api.Client.PutAsJsonAsync($"/orders/{ids[1]}/shipment", new Shipment("Parcel", "SYN-1"), token);
+        var after = ids[0] - 1;
+
+        var page = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&limit=2", token);
+        var shipped = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&shipped=true", token);
+        var unshipped = await api.Client.GetFromJsonAsync<Order[]>($"/orders?after={after}&shipped=false", token);
+
+        Assert.Equal(ids[..2], page?.Select(order => order.Id));
+        Assert.Equal([ids[1]], shipped?.Select(order => order.Id));
+        Assert.Equal([ids[0], ids[2]], unshipped?.Select(order => order.Id));
+    }
+
+    [Fact]
+    public async Task Every_invalid_list_parameter_is_reported()
+    {
+        var response = await api.Client.GetAsync("/orders?limit=0&after=x&shipped=maybe", TestContext.Current.CancellationToken);
+
+        Assert.Equal(new Dictionary<string, string[]>
+        {
+            ["limit"] = ["out-of-range"],
+            ["after"] = ["invalid-format"],
+            ["shipped"] = ["invalid-format"],
+        }, await Errors(response));
+    }
+
     private static async Task<Dictionary<string, string[]>?> Errors(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

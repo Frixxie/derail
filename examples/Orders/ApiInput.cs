@@ -4,6 +4,8 @@ namespace Orders;
 
 internal sealed record FieldError(string Field, string Code);
 
+internal delegate bool TryParse<T>(string input, out T value);
+
 internal static class ApiInput
 {
     public static Task<IResult> OnValid<T>(this Validation<T, FieldError> input, Func<T, Task<IResult>> action) =>
@@ -23,4 +25,11 @@ internal static class ApiInput
             .ToResult(() => new FieldError(name, "required"))
             .Ensure(value => value > 0, _ => new(name, "must-be-positive"))
             .ToValidation();
+
+    internal static Result<Option<T>, FieldError> Optional<T>(string? input, string name, TryParse<T> tryParse) =>
+        Option.FromNullable(input).Match(
+            text => tryParse(text, out var value)
+                ? Result.Ok<Option<T>, FieldError>(Option.Some(value))
+                : Result.Error<Option<T>, FieldError>(new(name, "invalid-format")),
+            () => Result.Ok<Option<T>, FieldError>(Option.None));
 }

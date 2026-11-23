@@ -11,15 +11,19 @@ internal sealed record NewOrder(string Description, NonEmpty<NewOrderLine> Lines
 internal sealed record NewOrderLine(string Sku, int Quantity);
 internal sealed record Order(long Id, string Description, IEnumerable<OrderLine> Lines);
 internal sealed record OrderLine(long Id, string Sku, int Quantity);
+internal sealed record OrderPage(int Limit, long After, Option<bool> Shipped);
 internal enum OrderError { NotFound }
 
 internal static class OrderEndpoints
 {
-    public static async Task<IResult> List(NpgsqlDataSource db, CancellationToken token)
-    {
-        await using var connection = await db.OpenConnectionAsync(token);
-        return Results.Ok(await connection.ReadAsync<Order>(token, SelectOrders("SELECT * FROM orders")));
-    }
+    public static Task<IResult> List(string? limit, string? after, string? shipped, NpgsqlDataSource db, CancellationToken token) =>
+        Page(limit, after, shipped).OnValid(async page =>
+        {
+            var filter = page.Shipped.Match(isShipped => isShipped ? "AND carrier IS NOT NULL" : "AND carrier IS NULL", () => "");
+            await using var connection = await db.OpenConnectionAsync(token);
+            return Results.Ok(await connection.ReadAsync<Order>(token,
+                SelectOrders($"SELECT * FROM orders WHERE id > @After {filter} ORDER BY id LIMIT @Limit"), new { page.After, page.Limit }));
+        });
 
     public static Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token) =>
         Find(id).InTransaction(db, token).Match(order => Results.Ok(order), Problem);
@@ -42,6 +46,16 @@ internal static class OrderEndpoints
         var count = await connection.ExecuteAsync(token, "DELETE FROM orders WHERE id = @Id", new { id });
         return count == 1 ? Results.NoContent() : ApiResults.NotFound("order-not-found");
     }
+
+    private static Validation<OrderPage, FieldError> Page(string? limit, string? after, string? shipped) =>
+        ApiInput.Optional<int>(limit, "limit", int.TryParse)
+            .Map(value => value.GetValueOrDefault(50))
+            .Ensure(value => value is >= 1 and <= 100, _ => new("limit", "out-of-range"))
+            .ToValidation()
+            .Zip(
+                ApiInput.Optional<long>(after, "after", long.TryParse).Map(value => value.GetValueOrDefault(0)).ToValidation(),
+                ApiInput.Optional<bool>(shipped, "shipped", bool.TryParse).ToValidation(),
+                (pageLimit, pageAfter, pageShipped) => new OrderPage(pageLimit, pageAfter, pageShipped));
 
     private static Validation<NewOrder, FieldError> Validate(OrderRequest request) =>
         ApiInput.Field(request.Description, "description", 200)
