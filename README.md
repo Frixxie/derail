@@ -416,6 +416,14 @@ Faults and cancellation from inputs or callbacks propagate to the caller; neithe
 becomes `None` or a typed `Error`. To cancel an operation, pass your token to the
 underlying async call inside the callback.
 
+### Removing one layer of nesting
+
+Use `Flatten()` in place of `Bind(inner => inner)` when both layers are the same
+primitive. For example, `Option.Some(Option.Some(3)).Flatten()` returns `Some(3)`;
+`None` at either level remains `None`. A nested `Result` keeps the first error.
+A flattened `Reader` runs both layers with the same environment at `Run`, and a
+flattened `Writer` keeps the inner value with outer events before inner events.
+
 ### Collecting a sequence of values
 
 Use `Sequence` when each element is already an `Option`, `Result`, or `Validation`.

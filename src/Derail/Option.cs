@@ -118,6 +118,12 @@ public static class OptionExtensions
             option.Match(Validation.Valid<T, TError>, () => Validation.Invalid<T, TError>(error()));
     }
 
+    extension<T>(Option<Option<T>> nested)
+    {
+        /// <summary>Removes one option layer. Absence at either level produces None.</summary>
+        public Option<T> Flatten() => nested.Bind(static inner => inner);
+    }
+
     extension<T, TResult>(Option<Func<T, TResult>> function)
     {
         /// <summary>Applies a wrapped function to a wrapped value.</summary>

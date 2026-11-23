@@ -154,6 +154,12 @@ public static class ResultExtensions
             result.Match(Validation.Valid<T, TError>, e => Validation.Invalid<T, TError>(e));
     }
 
+    extension<T, TError>(Result<Result<T, TError>, TError> nested)
+    {
+        /// <summary>Removes one result layer, returning the outer error or the inner result.</summary>
+        public Result<T, TError> Flatten() => nested.Bind(static inner => inner);
+    }
+
     extension<T, TResult, TError>(Result<Func<T, TResult>, TError> function)
     {
         /// <summary>Applies a wrapped function to a wrapped value; returns the first error.</summary>

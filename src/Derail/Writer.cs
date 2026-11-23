@@ -97,9 +97,15 @@ internal sealed record Leaf<TEvent>(ImmutableArray<TEvent> Events) : EventTree<T
 internal sealed record Concat<TEvent>(EventTree<TEvent> Left, EventTree<TEvent> Right)
     : EventTree<TEvent>(checked(Left.Count + Right.Count));
 
-/// <summary>Factory methods for values with deferred events.</summary>
+/// <summary>Factories and combinators for values with deferred events.</summary>
 public static class Writer
 {
+    extension<T, TEvent>(Writer<Writer<T, TEvent>, TEvent> nested)
+    {
+        /// <summary>Removes one writer layer, keeping the inner value and appending inner events after outer events.</summary>
+        public Writer<T, TEvent> Flatten() => nested.Bind(static inner => inner);
+    }
+
     /// <summary>Creates a value without events.</summary>
     public static Writer<T, TEvent> Pure<T, TEvent>(T value) => new(value, []);
 

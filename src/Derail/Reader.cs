@@ -39,9 +39,15 @@ public sealed class Reader<TEnv, T>
         Bind(value => bind(value).Map(next => project(value, next)));
 }
 
-/// <summary>Factory methods for environment-dependent computations.</summary>
+/// <summary>Factories and combinators for environment-dependent computations.</summary>
 public static class Reader
 {
+    extension<TEnv, T>(Reader<TEnv, Reader<TEnv, T>> nested)
+    {
+        /// <summary>Removes one reader layer. Both computations use the supplied environment when run.</summary>
+        public Reader<TEnv, T> Flatten() => nested.Bind(static inner => inner);
+    }
+
     /// <summary>Reads the environment itself.</summary>
     public static Reader<TEnv, TEnv> Ask<TEnv>() => new(env => env);
 

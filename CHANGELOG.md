@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `Flatten()` for nested `Option`, `Result`, `Reader`, and `Writer` values.
+
 - Added `AsyncReaderResult<TEnv, T, TError>` for lazy, cancellable workflows
   with explicit dependencies, typed errors, and lifts from `Result` and `ReaderResult`.
 
