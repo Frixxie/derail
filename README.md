@@ -54,6 +54,10 @@ Three changes may affect existing code:
 3. **Initialize absent options with `Option.None` instead of `default`.** For example,
    use `Option<int> count = Option.None;`. If every slot in an array should start
    absent, use `Array.Fill(counts, Option.None)` after allocating the `Option<int>[]`.
+   For a sequence of options, `FirstOrDefault()` on empty input returns an uninitialized
+   option without a `DRL001` diagnostic. Use `options.FirstOrDefault(Option.None)`
+   so callers can safely `Match` the result. For a dictionary of options, use
+   `byId.GetValueOrDefault(id, Option.None)` for the same reason.
 
 If upgrading from before `0.7.0`, note that `Validation.Zip` rejects an uninitialized
 operand even alongside an `Invalid`. For pre-`0.3.0` consumers, use
