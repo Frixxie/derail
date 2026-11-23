@@ -42,6 +42,10 @@
 - **Breaking:** `NonEmpty<T>`'s indexer throws `ArgumentOutOfRangeException` instead of
   `IndexOutOfRangeException` for an index outside the collection.
 
+- `Validation.Traverse` has an overload for `NonEmpty<T>` that returns `NonEmpty` values.
+  Calls that passed a `NonEmpty<T>` and stored the result as `IReadOnlyList<T>` now need
+  `.Map(values => (IReadOnlyList<T>)values)` or an `IEnumerable<T>`-typed argument.
+
 - `Task` combinators now follow the same await policy as `ValueTask` combinators.
   Callbacks after pending inputs no longer request the caller's synchronization
   context. If a callback updates a UI, dispatch that update to the UI thread.

@@ -579,6 +579,8 @@ Result<IReadOnlyList<int>, string> quantities = Result.Traverse(inputs, ParseQua
 Both collect immutable snapshots in input order. Empty input succeeds with an empty
 list. `Option` stops reading on `None`; `Result` stops on the first `Error`.
 `Validation` reads every element and collects all errors in encounter order.
+`Validation.Traverse` over a `NonEmpty<T>` returns a `NonEmpty` of values, so validating
+a required list keeps the guarantee that it has at least one element.
 
 ## API overview
 

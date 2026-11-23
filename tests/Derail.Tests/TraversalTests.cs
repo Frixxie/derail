@@ -38,6 +38,20 @@ public class TraversalTests
         return outcomes.All(v => v.Match(xs => errors.Length == 0 && xs.SequenceEqual(inputs), es => es.SequenceEqual(errors)));
     }
 
+    [Property]
+    public bool Validation_traverse_of_a_non_empty_collection_keeps_it_non_empty(int head, int[] tail, Func<int, bool> reject)
+    {
+        var source = new NonEmpty<int>(head, tail);
+        var errors = source.Where(reject).ToArray();
+
+        Validation<NonEmpty<int>, int> outcome = Validation.Traverse(source, x =>
+            reject(x) ? Validation.Invalid<int, int>(x) : Validation.Valid<int, int>(-x));
+
+        return outcome.Match(
+            values => errors.Length == 0 && values.SequenceEqual(source.Select(x => -x)),
+            es => es.SequenceEqual(errors));
+    }
+
     [Theory]
     [InlineData("Option", 2)]
     [InlineData("Result", 2)]

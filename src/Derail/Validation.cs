@@ -94,6 +94,15 @@ public static class Validation
     /// <summary>Maps every element in order. Collects all values on success, otherwise all errors in encounter order.</summary>
     public static Validation<IReadOnlyList<T>, TError> Traverse<TSource, T, TError>(IEnumerable<TSource> source, Func<TSource, Validation<T, TError>> map) =>
         Sequence(source.Select(map));
+
+    /// <summary>Maps every element in order. Collects all values into a non-empty collection on success, otherwise all errors in encounter order.</summary>
+    public static Validation<NonEmpty<T>, TError> Traverse<TSource, T, TError>(NonEmpty<TSource> source, Func<TSource, Validation<T, TError>> map)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(map);
+        var mapped = source.Map(map);
+        return mapped.Head.Zip(Sequence(mapped.Tail), static (head, tail) => new NonEmpty<T>(head, [.. tail]));
+    }
 }
 
 /// <summary>Combinators for <see cref="Validation{T, TError}"/>.</summary>
