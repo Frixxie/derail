@@ -41,6 +41,8 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
 /// The outcome of independent checks: either <see cref="Valid{T}"/> or <see cref="Invalid{TError}"/>.
 /// Unlike <see cref="Result{T, TError}"/>, combining validations collects every error instead of stopping at the first.
 /// </summary>
+/// <remarks>The default value matches neither case. Both case predicates return false;
+/// combinators that inspect an uninitialized case throw <see cref="System.Runtime.CompilerServices.SwitchExpressionException"/>.</remarks>
 public union Validation<T, TError>(Valid<T>, Invalid<TError>);
 
 /// <summary>Factory methods for <see cref="Validation{T, TError}"/>.</summary>

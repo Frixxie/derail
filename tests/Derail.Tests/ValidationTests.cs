@@ -97,6 +97,17 @@ public class ValidationTests
     public class Match
     {
         [Fact]
+        public void Default_MatchesNeitherCase_AndCannotBeConsumed()
+        {
+            Validation<int, string> validation = default;
+
+            validation.IsValid.Should().BeFalse();
+            validation.IsInvalid.Should().BeFalse();
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => validation.Match(x => x, _ => -1));
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => validation.GetValueOrDefault(42));
+        }
+
+        [Fact]
         public void CallsValidBranch_WhenValid() =>
             Parse("2").Match(v => v * 10, _ => -1).Should().Be(20);
 

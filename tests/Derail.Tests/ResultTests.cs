@@ -77,6 +77,24 @@ public class ResultTests
         }
 
         [Fact]
+        public void Default_IsNeitherASuccessNorAnError_WhenConsumed()
+        {
+            Result<int, string> result = default;
+
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.Match(x => x, _ => -1));
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.GetValueOrDefault(42));
+        }
+
+        [Fact]
+        public void Zip_InspectsTheRightOperandOnlyAfterSuccess()
+        {
+            Result<int, string> right = default;
+
+            Failed.Zip(right, (a, b) => a + b).Should().Be(Failed);
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => Parse("1").Zip(right, (a, b) => a + b));
+        }
+
+        [Fact]
         public void PatternMatching_ExtractsValueOrError()
         {
             static string Describe(Result<int, string> r) => r switch

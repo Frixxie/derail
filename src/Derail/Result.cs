@@ -7,6 +7,8 @@ public readonly record struct Ok<T>(T Value);
 public readonly record struct Error<TError>(TError Value);
 
 /// <summary>The outcome of an operation: either <see cref="Ok{T}"/> or <see cref="Error{TError}"/>.</summary>
+/// <remarks>The default value matches neither case. Both case predicates return false;
+/// combinators that inspect an uninitialized case throw <see cref="System.Runtime.CompilerServices.SwitchExpressionException"/>.</remarks>
 public union Result<T, TError>(Ok<T>, Error<TError>);
 
 /// <summary>Factory methods for <see cref="Result{T, TError}"/>.</summary>

@@ -78,11 +78,30 @@ The examples below come from [`BankingExamples.cs`](tests/Derail.Tests/BankingEx
 
 The examples often spell out types to show what each step receives and returns. In your own code, C# can usually infer them: `.Map((Account a) => a.Balance)` can be written as `.Map(a => a.Balance)`.
 
+### Default initialization
+
+These rules apply to `default` and to elements of newly allocated arrays:
+
+| Primitive | Meaning of `default` | Inspection and use |
+| --- | --- | --- |
+| `Option<T>` | `None` | Matches the `None` pattern, compares equal to an explicit `None`, and takes the absent branch of `Match`. |
+| `Result<T, TError>` | Uninitialized; neither `Ok` nor `Error` | `IsOk` and `IsError` are both false. Initialize with `Result.Ok` or `Result.Error` before use. |
+| `Validation<T, TError>` | Uninitialized; neither `Valid` nor `Invalid` | `IsValid` and `IsInvalid` are both false. Initialize with `Validation.Valid` or `Validation.Invalid` before use. |
+| `NonEmpty`, `Reader`, `ReaderResult`, `Writer` | `null` reference | No instance exists. Construct one before calling its members. |
+
+An uninitialized result or validation is a programming error, not a domain error.
+Combinators such as `Match`, `Map`, and `GetValueOrDefault` throw
+`SwitchExpressionException` when they need to inspect its case. `Result.Zip`
+stops at a left-hand `Error`, so it never inspects the right-hand result in that
+case. `Validation.Zip` inspects both inputs to accumulate errors and rejects an
+uninitialized input on either side. `Validation.Sequence` likewise rejects an
+uninitialized element even after an `Invalid`.
+
 ### Option: values that may be missing
 
-`default(Option<T>)` is `None`, including in newly allocated arrays. It matches the
-`None` pattern and compares equal to an explicitly constructed `None` option.
-`Option.Some(0)` is a present value.
+`Option.Some(0)` and `Option.Some<string?>(null)` are both present: `Match`
+passes the payload to the `some` callback. Use `Option.FromNullable((string?)null)`
+when a null reference should mean `None`.
 
 ```csharp
 Option<Account> FindAccount(AccountNumber number) =>

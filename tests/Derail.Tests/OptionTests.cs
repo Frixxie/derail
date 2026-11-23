@@ -98,6 +98,13 @@ public class OptionTests
         }
 
         [Fact]
+        public void SomeNull_IsPresent_WhileFromNullableNullIsNone()
+        {
+            Option.Some<string?>(null).Match(value => value is null, () => false).Should().BeTrue();
+            Option.FromNullable((string?)null).IsNone.Should().BeTrue();
+        }
+
+        [Fact]
         public async Task MappingDefault_PreservesNoneAcrossSyncAndAsyncPipelines()
         {
             Option<int> option = default;
