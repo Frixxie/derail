@@ -46,13 +46,25 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal(new ShipmentBody("Parcel", "SYN-001"), await first.Content.ReadFromJsonAsync<ShipmentBody>(token));
         Assert.Equal(new ShipmentBody("Parcel", "SYN-001"), await replay.Content.ReadFromJsonAsync<ShipmentBody>(token));
         Assert.Equal("Parcel:SYN-001", await api.Scalar<string>("SELECT carrier || ':' || tracking FROM orders WHERE id = 300"));
-        Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = 300 AND kind = 'order-shipped'"));
+        Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = 300"));
+    }
+
+    [Fact]
+    public async Task Changing_a_shipment_records_a_change_event()
+    {
+        await api.Execute("INSERT INTO orders (id, description) VALUES (310, 'Sample')");
+
+        await api.Ship(310, Requested);
+        await api.Ship(310, new { carrier = "Parcel", tracking = "SYN-002" });
+
+        Assert.Equal("order-shipped,shipment-changed",
+            await api.Scalar<string>("SELECT string_agg(kind, ',' ORDER BY id) FROM order_events WHERE order_id = 310"));
     }
 
     [Theory]
     [InlineData(600L, "SYN-001")]
     [InlineData(601L, "SYN-002")]
-    public async Task Overlapping_shipments_commit_only_one_event(long id, string otherTracking)
+    public async Task Overlapping_shipments_record_one_order_shipped_event(long id, string otherTracking)
     {
         await api.Execute("INSERT INTO orders (id, description) VALUES ($1, 'Sample')", id);
         var first = new ShipmentBody("Parcel", "SYN-001");
@@ -61,7 +73,7 @@ public sealed class ShipmentTests(OrdersApi api) : IClassFixture<OrdersApi>
         var (left, right) = await api.ShipTogether(id, first, second);
         Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (left, right));
         Assert.Contains(await api.Scalar<string>("SELECT tracking FROM orders WHERE id = $1", id), new[] { first.Tracking, second.Tracking });
-        Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = $1", id));
+        Assert.Equal(1L, await api.Scalar<long>("SELECT count(*) FROM order_events WHERE order_id = $1 AND kind = 'order-shipped'", id));
     }
 
     [Fact]

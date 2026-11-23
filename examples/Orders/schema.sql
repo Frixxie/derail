@@ -9,7 +9,7 @@ CREATE TABLE orders (
 );
 
 CREATE TABLE order_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     order_id bigint NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    kind text NOT NULL,
-    PRIMARY KEY (order_id, kind)
+    kind text NOT NULL
 );

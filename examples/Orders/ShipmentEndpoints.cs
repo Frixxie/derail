@@ -19,7 +19,8 @@ internal static class ShipmentEndpoints
             .Zip(ApiInput.Field(request.Tracking, "tracking", 80), (carrier, tracking) => new Shipment(carrier, tracking))
             .OnValid(shipment => Lock(id)
                 .Ensure(order => !order.Delivered, _ => ShipmentError.AlreadyDelivered)
-                .Bind(_ => Save(id, shipment))
+                .Map(order => Shipping.Ship(order.Shipment, shipment))
+                .Bind(shipped => Save(id, shipped))
                 .InTransaction(db, token)
                 .Match(saved => Results.Ok(saved), Problem));
 
@@ -58,13 +59,14 @@ internal static class ShipmentEndpoints
                 .ToResult(() => ShipmentError.OrderNotFound);
         });
 
-    private static AsyncReaderResult<NpgsqlConnection, Shipment, ShipmentError> Save(long id, Shipment shipment) =>
+    private static AsyncReaderResult<NpgsqlConnection, Shipment, ShipmentError> Save(long id, Writer<Shipment, string> shipped) =>
         new(async (connection, token) =>
         {
+            var (shipment, events) = shipped;
             await connection.ExecuteAsync(token, "UPDATE orders SET carrier = @Carrier, tracking = @Tracking WHERE id = @Id",
                 new { Id = id, shipment.Carrier, shipment.Tracking });
-            await connection.ExecuteAsync(token,
-                "INSERT INTO order_events (order_id, kind) VALUES (@Id, 'order-shipped') ON CONFLICT DO NOTHING", new { Id = id });
+            foreach (var kind in events)
+                await connection.ExecuteAsync(token, "INSERT INTO order_events (order_id, kind) VALUES (@Id, @Kind)", new { Id = id, Kind = kind });
             return Result.Ok<Shipment, ShipmentError>(shipment);
         });
 

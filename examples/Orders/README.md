@@ -7,7 +7,7 @@ An order has a description and, optionally, one shipment. Create an order first,
 | Order | `POST /orders` | `GET /orders` or `GET /orders/{id}` | `PUT /orders/{id}` | `DELETE /orders/{id}` |
 | Shipment | `PUT /orders/{id}/shipment` | `GET /orders/{id}/shipment` | `PUT /orders/{id}/shipment` | `DELETE /orders/{id}/shipment` |
 
-Creating an order returns `201` and a `Location` header. Putting a shipment returns `200` with the saved carrier and tracking number; repeating or replacing it records no extra `order-shipped` event. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
+Creating an order returns `201` and a `Location` header. Putting a shipment returns `200` with the saved carrier and tracking number. The first shipment records an `order-shipped` event, a different one records `shipment-changed`, and repeating it records nothing. `PUT /orders/{id}/shipment/delivery` marks the shipment delivered; after that, changing or deleting it returns `409`. Deleting a shipment leaves the order intact. Deleting an order removes both. Successful deletes return `204`, missing resources return `404`, and invalid fields return `400`.
 
 ## How it uses Derail
 
@@ -16,6 +16,7 @@ Creating an order returns `201` and a `Location` header. Putting a shipment retu
 - Single-row reads return an `Option`; [`Match`](ApiResults.cs) turns it into `200` or `404`.
 - Shipment changes are [`AsyncReaderResult` steps](ShipmentEndpoints.cs) sharing one connection: `Lock` reads the order `FOR UPDATE`, `Ensure` applies the delivery rule, and `Bind` runs the write. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success.
 - A `ShipmentError` says why a step failed, and one `switch` maps it to `404` or `409`.
+- [`Shipping.Ship`](Shipping.cs) is a pure function that returns the shipment as a `Writer` with the events it implies. The `Save` step writes the shipment and its events in the same transaction.
 
 ## Try it
 
