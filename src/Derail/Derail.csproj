@@ -24,11 +24,18 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackOptionAnalyzer</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Derail.Analyzers/Derail.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
-    <None Include="../Derail.Analyzers/bin/$(Configuration)/netstandard2.0/Derail.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs/" Visible="false" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <!-- Pack the analyzer from the path its project reference resolves to, not a hard-coded bin directory. -->
+  <Target Name="PackOptionAnalyzer" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(Analyzer)" Condition="'%(Analyzer.Filename)' == 'Derail.Analyzers'" PackagePath="analyzers/dotnet/cs/" />
+    </ItemGroup>
+  </Target>
 </Project>
