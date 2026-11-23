@@ -189,25 +189,25 @@ public class BankingExamples
     [InlineData("1234.56.78901", true)]
     [InlineData("1111.11.11111", false)] // Frozen
     [InlineData("1098.76.54321", false)] // Insufficient funds
-    public void Withdrawal_RecordsOnlySuccessfulWithdrawals(string input, bool succeeds)
+    public void Withdrawal_LogsOnlySuccessfulWithdrawals(string input, bool succeeds)
     {
-        var withdrawals = new List<AccountNumber>();
+        using var log = new StringWriter();
         var balance = ParseAccountNumber(input)
             .Bind(GetAccount)
             .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
             .Bind(a => Withdraw(a, 100m))
-            .Tap(a => withdrawals.Add(a.Number))
+            .Tap(_ => log.WriteLine("Withdrawal completed"))
             .Map(a => a.Balance);
 
         if (succeeds)
         {
             balance.Should().Be(Result.Ok<decimal, TransferError>(900m));
-            withdrawals.Should().Equal(Savings.Number);
+            log.ToString().Should().Be($"Withdrawal completed{log.NewLine}");
         }
         else
         {
             balance.IsError.Should().BeTrue();
-            withdrawals.Should().BeEmpty();
+            log.ToString().Should().BeEmpty();
         }
     }
 
@@ -387,17 +387,26 @@ public class BankingExamples
         return currency == "EUR" ? 0.085m : 1m;
     }
 
-    private static Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency) =>
+    private static async Task<bool> IsActiveAsync(Account account)
+    {
+        await Task.Yield();
+        return !account.Frozen;
+    }
+
+    private static Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency, TextWriter audit) =>
         ParseAccountNumber(input)
             .BindAsync(n => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
-            .Bind(EnsureActive)
-            .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency));
+            .EnsureAsync(IsActiveAsync, a => new TransferError.AccountFrozen(a.Number))
+            .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency))
+            .TapAsync(_ => audit.WriteLineAsync("Balance converted"));
 
     [Fact]
     public async Task Async_PipelineReadsLikeTheSyncOne()
     {
-        (await BalanceInAsync("1234.56.78901", "EUR")).Should().Be(Result.Ok<decimal, TransferError>(85m));
-        (await BalanceInAsync("1111.11.11111", "EUR")).Should().Be(
+        using var audit = new StringWriter();
+        (await BalanceInAsync("1234.56.78901", "EUR", audit)).Should().Be(Result.Ok<decimal, TransferError>(85m));
+        (await BalanceInAsync("1111.11.11111", "EUR", audit)).Should().Be(
             Result.Error<decimal, TransferError>(new TransferError.AccountFrozen(Seized.Number)));
+        audit.ToString().Should().Be($"Balance converted{audit.NewLine}");
     }
 }

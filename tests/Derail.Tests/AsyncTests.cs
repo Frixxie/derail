@@ -22,6 +22,28 @@ public class ResultAsyncTests
     public class OnResult
     {
         [Fact]
+        public async Task EnsureAsync_WaitsForPredicateBeforeCreatingError()
+        {
+            var decision = new TaskCompletionSource<bool>();
+            var pending = Parse("2").EnsureAsync(_ => decision.Task, x => $"rejected {x}");
+
+            pending.IsCompleted.Should().BeFalse();
+            decision.SetResult(false);
+            (await pending).Should().Be(Result.Error<int, string>("rejected 2"));
+        }
+
+        [Fact]
+        public async Task TapAsync_WaitsForActionAndPropagatesItsFailure()
+        {
+            var observation = new TaskCompletionSource();
+            var pending = Parse("2").TapAsync(_ => observation.Task);
+
+            pending.IsCompleted.Should().BeFalse();
+            observation.SetException(new InvalidOperationException("observation failed"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => pending);
+        }
+
+        [Fact]
         public async Task MapAsync_TransformsOkValue() =>
             (await Parse("2").MapAsync(x => Task.FromResult(x * 2))).Should().Be(Result.Ok<int, string>(4));
 
@@ -54,6 +76,28 @@ public class ResultAsyncTests
 
     public class OnTaskOfResult
     {
+        [Fact]
+        public async Task EnsureAsync_And_TapAsync_PreserveSuccess()
+        {
+            var observed = new List<int>();
+            var result = await ParseAsync("2")
+                .EnsureAsync(x => Task.FromResult(x == 2), _ => throw new InvalidOperationException())
+                .TapAsync(x => { observed.Add(x); return Task.CompletedTask; });
+
+            observed.Should().Equal(2);
+            result.Should().Be(Result.Ok<int, string>(2));
+        }
+
+        [Fact]
+        public async Task EnsureAsync_And_TapAsync_SkipCallbacksOnError()
+        {
+            var result = await ParseAsync("x")
+                .EnsureAsync(_ => throw new InvalidOperationException(), _ => throw new InvalidOperationException())
+                .TapAsync(_ => throw new InvalidOperationException());
+
+            result.Should().Be(Parse("x"));
+        }
+
         [Fact]
         public async Task Map_TransformsOkValue() =>
             (await ParseAsync("2").Map(x => x + 1)).Should().Be(Result.Ok<int, string>(3));

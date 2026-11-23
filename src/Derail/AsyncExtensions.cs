@@ -2,7 +2,7 @@ namespace Derail;
 
 /// <summary>Async combinators for <see cref="Result{T, TError}"/> and <see cref="Option{T}"/>.</summary>
 /// <remarks>
-/// Methods on a value take an async function (<c>MapAsync</c>, <c>BindAsync</c>).
+/// Methods on a value take an async function.
 /// Methods on a <see cref="Task{TResult}"/> continue a pipeline that is already async; the name says whether the function is.
 /// </remarks>
 public static class AsyncExtensions
@@ -20,6 +20,29 @@ public static class AsyncExtensions
         /// <summary>Chains an async result-returning function when successful.</summary>
         public Task<Result<TResult, TError>> BindAsync<TResult>(Func<T, Task<Result<TResult, TError>>> bind) =>
             result.Match(bind, e => Task.FromResult(Result.Error<TResult, TError>(e)));
+
+        /// <summary>Awaits an action on success, then returns the original result.</summary>
+        public async Task<Result<T, TError>> TapAsync(Func<T, Task> action)
+        {
+            switch (result)
+            {
+                case Ok<T>(var value):
+                    await action(value);
+                    return result;
+                case Error<TError>:
+                    return result;
+                default:
+                    throw new System.Runtime.CompilerServices.SwitchExpressionException(result);
+            }
+        }
+
+        /// <summary>Awaits a predicate on success and creates an error only if it returns false.</summary>
+        public async Task<Result<T, TError>> EnsureAsync(Func<T, Task<bool>> predicate, Func<T, TError> errorFactory) =>
+            result switch
+            {
+                Ok<T>(var value) => await predicate(value) ? result : new Error<TError>(errorFactory(value)),
+                Error<TError> => result,
+            };
     }
 
     extension<T, TError>(Task<Result<T, TError>> task)
@@ -43,6 +66,14 @@ public static class AsyncExtensions
         /// <summary>Chains an async result-returning function when successful.</summary>
         public async Task<Result<TResult, TError>> BindAsync<TResult>(Func<T, Task<Result<TResult, TError>>> bind) =>
             await (await task).BindAsync(bind);
+
+        /// <summary>Awaits an action on success, then returns the original result.</summary>
+        public async Task<Result<T, TError>> TapAsync(Func<T, Task> action) =>
+            await (await task).TapAsync(action);
+
+        /// <summary>Awaits a predicate on success and creates an error only if it returns false.</summary>
+        public async Task<Result<T, TError>> EnsureAsync(Func<T, Task<bool>> predicate, Func<T, TError> errorFactory) =>
+            await (await task).EnsureAsync(predicate, errorFactory);
 
         /// <summary>Folds the result into a single value.</summary>
         public async Task<TResult> Match<TResult>(Func<T, TResult> ok, Func<TError, TResult> error) =>

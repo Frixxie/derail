@@ -62,3 +62,45 @@ public class ResultEnsureBenchmarks
     [Benchmark]
     public Result<int, int> Ensure() => input.Ensure(static x => x > 0, static x => x);
 }
+
+[MemoryDiagnoser]
+public class ResultAsyncGuardBenchmarks
+{
+    [Params(42, -1, null)]
+    public int? Value { get; set; }
+
+    private Result<int, int> input;
+    private int observed;
+    private Func<int, Task> observe = null!;
+
+    [GlobalSetup]
+    public async Task Setup()
+    {
+        input = Value is int value ? Result.Ok<int, int>(value) : Result.Error<int, int>(0);
+        observe = x => { observed = x; return Task.CompletedTask; };
+
+        var direct = await Direct();
+        var expected = observed;
+        observed = 0;
+        if (!(await EnsureAsyncThenTapAsync()).Equals(direct) || observed != expected)
+            throw new InvalidOperationException("Async guard benchmark outcomes differ");
+    }
+
+    private static Task<bool> IsPositive(int value) => Task.FromResult(value > 0);
+
+    [Benchmark(Baseline = true)]
+    public async Task<Result<int, int>> Direct()
+    {
+        if (input is Ok<int>(var value))
+        {
+            if (!await IsPositive(value))
+                return Result.Error<int, int>(value);
+            await observe(value);
+        }
+        return input;
+    }
+
+    [Benchmark]
+    public Task<Result<int, int>> EnsureAsyncThenTapAsync() =>
+        input.EnsureAsync(IsPositive, static x => x).TapAsync(observe);
+}

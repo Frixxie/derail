@@ -26,6 +26,7 @@ timing. Fixtures are synthetic and created outside the timed methods.
 | `ResultBenchmarks` | Parsing, positivity check, and mapping; valid, malformed, zero, negative inputs | Equivalent `TryParse` control flow |
 | `ResultTapBenchmarks` | Record a successful value in a field, or skip an upstream error | Direct success branch and field assignment |
 | `ResultEnsureBenchmarks` | Check a prebuilt result: pass, reject, or preserve an upstream error | Direct positivity check and error construction |
+| `ResultAsyncGuardBenchmarks` | Chain `EnsureAsync` and `TapAsync` on passing, rejected, and already-failed results using completed tasks | Direct branches awaiting the same predicate and observation; measures pipeline overhead without I/O |
 | `NonEmptyMapBenchmarks` | Mapping 1, 8, 32, 1024 elements | An array loop producing the same elements |
 | `NonEmptyConstructionBenchmarks` | Head/tail construction, sequence conversion, repeated singleton append | Direct head/tail construction |
 | `WriterBenchmarks` | Repeated single-event `Bind` versus bulk construction | A local list accumulator, snapshotted into a Writer |

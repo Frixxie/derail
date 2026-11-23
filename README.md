@@ -33,7 +33,7 @@ Use `Result` for a sequence of dependent steps that should stop at the first exp
 
 For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind(a => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
 
-Use `Ensure` to reject a successful value that fails a rule, and `Tap` for a synchronous observation such as recording a metric. An existing error skips both. If the step can return a failure that matters to the caller, use `Bind`; if it needs to be awaited, do not pass an async lambda to `Tap`.
+Use `Ensure` to reject a successful value that fails a rule, and `Tap` for a synchronous observation such as recording a metric. An existing error skips both. For an async predicate or observation, use `EnsureAsync` or `TapAsync`. If the step returns its own `Result`, use `Bind` or `BindAsync`.
 
 ## Quick tour
 
@@ -70,15 +70,15 @@ Result<Account, TransferError> GetAccount(AccountNumber number) =>
     FindAccount(number).ToResult(TransferError () => new TransferError.AccountNotFound(number));
 ```
 
-This pipeline records the account number only after a withdrawal succeeds:
+This pipeline logs a completed withdrawal and returns the new balance. A frozen account or insufficient funds skips the success log:
 
 ```csharp
-var withdrawals = new List<AccountNumber>();
+TextWriter log = Console.Out;
 var balance = ParseAccountNumber(input)
     .Bind(GetAccount)
     .Ensure(a => !a.Frozen, a => new TransferError.AccountFrozen(a.Number))
     .Bind(a => Withdraw(a, 100m))
-    .Tap(a => withdrawals.Add(a.Number))
+    .Tap(_ => log.WriteLine("Withdrawal completed"))
     .Map(a => a.Balance);
 ```
 
@@ -256,12 +256,15 @@ immutable collection storage protect these invariants; none needs alternative un
 `MapAsync`/`BindAsync` lift async functions, and the same combinators work directly on `Task<Result<…>>` and `Task<Option<…>>`, so async pipelines read like sync ones:
 
 ```csharp
-Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency) =>
+Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currency, TextWriter audit) =>
     ParseAccountNumber(input)
         .BindAsync(n => FindAccountAsync(n).ToResult(TransferError () => new TransferError.AccountNotFound(n)))
-        .Bind(EnsureActive)
-        .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency));
+        .EnsureAsync(IsActiveAsync, a => new TransferError.AccountFrozen(a.Number))
+        .MapAsync(async a => a.Balance * await ExchangeRateAsync(currency))
+        .TapAsync(_ => audit.WriteLineAsync("Balance converted"));
 ```
+
+On either `Result<T, TError>` or `Task<Result<T, TError>>`, `EnsureAsync` awaits a success predicate and calls the synchronous error factory only when the predicate returns `false`. `TapAsync` awaits the observation and returns the original result. Both skip their callbacks on an existing error. Exceptions and cancellation propagate through the task.
 
 ## API overview
 
@@ -274,7 +277,7 @@ Task<Result<decimal, TransferError>> BalanceInAsync(string input, string currenc
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` (first error) | `Zip` (2 or 3), `Apply`, `Sequence` (all errors) |
 | Exit | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` | `Match`, `GetValueOrDefault` |
 | Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
-| Async | `MapAsync`, `BindAsync`, `Task<Option<T>>` extensions | `MapAsync`, `BindAsync`, `Task<Result<T, TError>>` extensions | — |
+| Async | `MapAsync`, `BindAsync`, `Task<Option<T>>` extensions | `MapAsync`, `BindAsync`, `EnsureAsync`, `TapAsync`, `Task<Result<T, TError>>` extensions | — |
 
 ## Build, test and benchmark
 

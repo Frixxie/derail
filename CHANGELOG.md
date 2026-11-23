@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added `EnsureAsync` for async predicates and `TapAsync` for awaited observations on both `Result<T, TError>` and `Task<Result<T, TError>>`.
+
 ## 0.4.0
 
 ### Added
