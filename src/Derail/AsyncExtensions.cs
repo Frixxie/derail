@@ -122,7 +122,11 @@ public static partial class AsyncExtensions
     {
         /// <summary>Runs an asynchronous fallback only when absent.</summary>
         public Task<Option<T>> OrElseAsync(Func<Task<Option<T>>> fallback) =>
-            option.IsSome ? Task.FromResult(option) : fallback();
+            option switch
+            {
+                Some<T> => Task.FromResult(option),
+                None => fallback(),
+            };
 
         /// <summary>Transforms the value with an async function when present.</summary>
         public async Task<Option<TResult>> MapAsync<TResult>(Func<T, Task<TResult>> map) =>

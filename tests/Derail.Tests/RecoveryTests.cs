@@ -47,6 +47,18 @@ public class RecoveryTests
         Assert.Throws<SwitchExpressionException>(() => source.TapError(_ => throw new InvalidOperationException()));
     }
 
+    [Fact]
+    public async Task Default_option_is_not_a_missing_value()
+    {
+        Option<int> source = default;
+        static Option<int> Unexpected() => throw new InvalidOperationException("unexpected fallback");
+        Assert.Throws<SwitchExpressionException>(() => source.OrElse(Unexpected));
+        await Assert.ThrowsAsync<SwitchExpressionException>(() => source.OrElseAsync(() => Task.FromResult(Unexpected())));
+        await Assert.ThrowsAsync<SwitchExpressionException>(() => source.OrElseAsync(() => ValueTask.FromResult(Unexpected())).AsTask());
+        await Assert.ThrowsAsync<SwitchExpressionException>(() => Task.FromResult(source).OrElse(Unexpected));
+        await Assert.ThrowsAsync<SwitchExpressionException>(() => ValueTask.FromResult(source).OrElse(Unexpected).AsTask());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -130,7 +130,11 @@ public static partial class AsyncExtensions
         /// <summary>Runs a ValueTask-returning fallback only when absent.</summary>
         [OverloadResolutionPriority(-1)]
         public ValueTask<Option<T>> OrElseAsync(Func<ValueTask<Option<T>>> fallback) =>
-            option.IsSome ? ValueTask.FromResult(option) : fallback();
+            option switch
+            {
+                Some<T> => ValueTask.FromResult(option),
+                None => fallback(),
+            };
 
         /// <summary>Transforms the value with a ValueTask-returning function when present.</summary>
         [OverloadResolutionPriority(-1)]

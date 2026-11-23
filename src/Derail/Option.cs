@@ -81,7 +81,12 @@ public static class OptionExtensions
             option.Match(bind, () => Option.None);
 
         /// <summary>Returns this option when present; otherwise invokes the fallback once.</summary>
-        public Option<T> OrElse(Func<Option<T>> fallback) => option.IsSome ? option : fallback();
+        public Option<T> OrElse(Func<Option<T>> fallback) =>
+            option switch
+            {
+                Some<T> => option,
+                None => fallback(),
+            };
 
         /// <summary>Keeps the value only when it satisfies the predicate.</summary>
         public Option<T> Where(Func<T, bool> predicate) =>
