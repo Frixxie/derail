@@ -370,6 +370,20 @@ operations, but has single-consumption constraints; there is one `Task`-based
 workflow API. A pre-canceled token prevents execution. Once I/O starts, cancellation
 is cooperative: forward the supplied token to the underlying operation.
 
+#### Bringing existing values into a reader workflow
+
+| Starting point | Conversion | What happens at `Run` |
+| --- | --- | --- |
+| An already computed `Result<T, E>` | `ReaderResult.FromResult<TEnv, T, E>(result)` | Returns the same success or error in every environment; the original operation is not repeated. |
+| An environment lookup returning `Option<T>` | `ReaderResult.FromLookup(lookup, whenNone)` | Calls the lookup once per run. `Some(null)` is a success; only `None` calls the error factory. |
+| An infallible `Reader` needed in an async fallible workflow | `AsyncReaderResult.FromReaderResult(ReaderResult.FromReader<TEnv, T, E>(reader))` | Runs the synchronous reader with the supplied environment; lifting it does not schedule background work. |
+| An existing `Writer<T, E>` needed in an ordinary reader | `Reader.Pure<TEnv, Writer<T, E>>(writer)` | Returns the writer itself, with its ordered events intact. Lifting only `writer.Value` discards those events. |
+
+The [executable shipping quote](tests/PackageConsumer/ShippingQuote.cs) combines an
+already priced subtotal with a carrier rate looked up at `Run`. It keeps the
+original error or the writer's ordered events. In contrast, `Result.ToOption()`
+explicitly discards the error: converting back can supply a new error, not restore the old one.
+
 #### Async combinators on Option and Result
 
 `MapAsync` and `BindAsync` accept functions returning `Task` or `ValueTask`. The same combinators work directly on a `Result` or `Option` wrapped in either type:

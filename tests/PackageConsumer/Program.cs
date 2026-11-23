@@ -37,3 +37,11 @@ if ((await discounted).GetValueOrDefault(-1) != 14 || quote.Run(2) != 16 || (awa
 if (Parcel.Create(30, 20, 10, 1.5m) is not Valid<Parcel>(Parcel(30, 20, 10, 1.5m)) ||
     !Parcel.Create(0, 20, 10, -1m).Match(_ => false, errors => errors.SequenceEqual(["lengthCm", "weightKg"])))
     throw new InvalidOperationException("Unexpected parcel validation result.");
+
+var subtotal = Result.Ok<Writer<decimal, string>, string>(new(20m, ["priced", "discounted"]));
+var shipping = AsyncReaderResult.FromReaderResult(ShippingQuote.WithFreight(subtotal, "Parcel"));
+var priced = await shipping.Run(new RateTable(new Dictionary<string, decimal> { ["Parcel"] = 3m }));
+var missingRate = await shipping.Run(new RateTable(new Dictionary<string, decimal>()));
+if (!priced.Match(w => w.Value == 23m && w.Events.SequenceEqual(["priced", "discounted"]), _ => false)
+    || !missingRate.Equals(Result.Error<Writer<decimal, string>, string>("No rate for Parcel")))
+    throw new InvalidOperationException("Unexpected shipping quote after lifting the workflow.");

@@ -50,6 +50,14 @@ public sealed class ReaderResult<TEnv, T, TError>
 /// <summary>Factory methods for fallible environment-dependent computations.</summary>
 public static class ReaderResult
 {
+    /// <summary>Returns the already computed result on every run, independently of the environment.</summary>
+    public static ReaderResult<TEnv, T, TError> FromResult<TEnv, T, TError>(Result<T, TError> result) =>
+        new(_ => result);
+
+    /// <summary>Runs the optional lookup in the supplied environment. Creates an error only when that lookup returns None.</summary>
+    public static ReaderResult<TEnv, T, TError> FromLookup<TEnv, T, TError>(Func<TEnv, Option<T>> lookup, Func<TError> whenNone) =>
+        new(env => lookup(env).ToResult(whenNone));
+
     /// <summary>Creates a computation that always succeeds with the supplied value.</summary>
     public static ReaderResult<TEnv, T, TError> Pure<TEnv, T, TError>(T value) =>
         new(_ => Result.Ok<T, TError>(value));

@@ -6,6 +6,34 @@ namespace Derail.Tests;
 
 public class ReaderResultTests
 {
+    [Property]
+    public bool FromResult_preserves_the_case_and_payload_in_every_environment(bool ok, int? payload, int env)
+    {
+        var source = ok ? Result.Ok<int?, int?>(payload) : Result.Error<int?, int?>(payload);
+        var reader = ReaderResult.FromResult<int, int?, int?>(source);
+        return source.Equals(reader.Run(env)) && source.Equals(reader.Run(~env));
+    }
+
+    [Fact]
+    public void FromLookup_reads_each_environment_at_run_and_creates_errors_only_for_absence()
+    {
+        var reads = new List<bool>();
+        var errors = 0;
+        Func<bool, Option<string?>> lookup = present =>
+        {
+            reads.Add(present);
+            return present ? Option.Some<string?>(null) : Option.None;
+        };
+        var reader = ReaderResult.FromLookup(lookup, () => ++errors);
+
+        Assert.Empty(reads);
+        Assert.Equal(0, errors);
+        Assert.Equal(Result.Ok<string?, int>(null), reader.Run(true));
+        Assert.Equal(Result.Error<string?, int>(1), reader.Run(false));
+        Assert.Equal(Result.Error<string?, int>(2), reader.Run(false));
+        Assert.Equal([true, false, false], reads);
+    }
+
     [Fact]
     public void BindAndZip_DoNotRunContinuationAfterError()
     {
@@ -94,14 +122,14 @@ public class ReaderResultTests
     [Property]
     public bool Map_Identity(Func<int, int?> lookup, int environment)
     {
-        var reader = new ReaderResult<int, int, string>(env => Option.FromNullable(lookup(env)).ToResult(() => "missing"));
+        var reader = ReaderResult.FromLookup((int env) => Option.FromNullable(lookup(env)), () => "missing");
         return reader.Map(x => x).Run(environment).Equals(reader.Run(environment));
     }
 
     [Property]
     public bool Map_Composition(Func<int, int?> lookup, int environment, Func<int, int> f, Func<int, int> g)
     {
-        var reader = new ReaderResult<int, int, string>(env => Option.FromNullable(lookup(env)).ToResult(() => "missing"));
+        var reader = ReaderResult.FromLookup((int env) => Option.FromNullable(lookup(env)), () => "missing");
         return reader.Map(f).Map(g).Run(environment).Equals(reader.Map(x => g(f(x))).Run(environment));
     }
 
@@ -116,7 +144,7 @@ public class ReaderResultTests
     public bool Bind_RightIdentity(bool ok, int value, int environment)
     {
         var result = ok ? Result.Ok<int, string>(value) : Result.Error<int, string>("failed");
-        var reader = new ReaderResult<int, int, string>(_ => result);
+        var reader = ReaderResult.FromResult<int, int, string>(result);
         return reader.Bind(ReaderResult.Pure<int, int, string>).Run(environment).Equals(result);
     }
 
@@ -128,7 +156,7 @@ public class ReaderResultTests
             ? Result.Ok<int, string>(x / 2)
             : Result.Error<int, string>("odd"));
         var result = ok ? Result.Ok<int, string>(value) : Result.Error<int, string>("failed");
-        var reader = new ReaderResult<int, int, string>(_ => result);
+        var reader = ReaderResult.FromResult<int, int, string>(result);
 
         return reader.Bind(Add).Bind(Half).Run(environment)
             .Equals(reader.Bind(x => Add(x).Bind(Half)).Run(environment));

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `ReaderResult.FromResult` for computed outcomes and `ReaderResult.FromLookup`
+  for optional environment lookups with a lazy missing-value error.
+
 - `Validation.Zip` now combines four independent inputs and collects their errors left to right.
 
 - Added an ASP.NET Core order-shipment example with transactional PostgreSQL persistence and HTTP integration tests.
