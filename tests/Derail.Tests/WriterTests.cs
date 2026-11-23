@@ -77,6 +77,16 @@ public class WriterTests
     }
 
     [Fact]
+    public void Zip_RejectsEventCountOverflow()
+    {
+        var writer = Writer.Tell(1);
+        for (var i = 0; i < 30; i++)
+            writer = writer.Zip(writer, static (value, _) => value);
+
+        Assert.Throws<OverflowException>(() => writer.Zip(writer, static (value, _) => value));
+    }
+
+    [Fact]
     public void Bind_LongLeftNestedChain_KeepsEventOrder()
     {
         const int count = 100_000;

@@ -95,7 +95,7 @@ internal abstract record EventTree<TEvent>(int Count);
 internal sealed record Leaf<TEvent>(ImmutableArray<TEvent> Events) : EventTree<TEvent>(Events.Length);
 
 internal sealed record Concat<TEvent>(EventTree<TEvent> Left, EventTree<TEvent> Right)
-    : EventTree<TEvent>(Left.Count + Right.Count);
+    : EventTree<TEvent>(checked(Left.Count + Right.Count));
 
 /// <summary>Factory methods for values with deferred events.</summary>
 public static class Writer
