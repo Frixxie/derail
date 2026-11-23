@@ -24,7 +24,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackOptionAnalyzer</TargetsForTfmSpecificContentInPackage>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackDerailAnalyzer</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,11 +33,11 @@
   </ItemGroup>
 
   <!-- Pack the analyzer from the path its project reference resolves to, not a hard-coded bin directory. -->
-  <Target Name="PackOptionAnalyzer" DependsOnTargets="ResolveProjectReferences">
+  <Target Name="PackDerailAnalyzer" DependsOnTargets="ResolveProjectReferences">
     <ItemGroup>
-      <_OptionAnalyzer Include="@(Analyzer)" Condition="'%(Analyzer.Filename)' == 'Derail.Analyzers'" />
-      <TfmSpecificPackageFile Include="@(_OptionAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
+      <_DerailAnalyzer Include="@(Analyzer)" Condition="'%(Analyzer.Filename)' == 'Derail.Analyzers'" />
+      <TfmSpecificPackageFile Include="@(_DerailAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
     </ItemGroup>
-    <Error Condition="'@(_OptionAnalyzer)' == ''" Text="Derail.Analyzers.dll was not resolved, so the package would ship without DRL001." />
+    <Error Condition="'@(_DerailAnalyzer)' == ''" Text="Derail.Analyzers.dll was not resolved, so the package would ship without DRL001." />
   </Target>
 </Project>

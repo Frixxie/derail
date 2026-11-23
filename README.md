@@ -143,8 +143,18 @@ The Derail NuGet package includes a C# analyzer. Build error `DRL001` flags
 `default(Option<T>)`, target-typed `default`, and parameterless `new Option<T>()`
 or `new()` when the target is an option. Use `Option.None` for absence or
 `Option.Some(value)` for presence. Constructors that take a case are also valid.
-The analyzer checks explicit expressions; it cannot detect every zero-initialized
-field or array slot.
+The same rule covers `Result<T, TError>` and `Validation<T, TError>`, and its message
+names the cases to use for each type. The analyzer checks explicit expressions only.
+These still compile and fail at run time with `SwitchExpressionException`:
+
+- fields and auto-properties that no constructor or initializer assigns
+- slots of a newly allocated array, such as `new Option<int>[n]`
+- `default(T)` in generic code where `T` is a Derail union
+- `FirstOrDefault()` or `GetValueOrDefault(key)` without a fallback
+- serializer output for a missing property, since serializers create the default value
+
+Assign these explicitly, pass a fallback such as `Option.None`, or map serialized data
+from nullable DTO properties with `Option.FromNullable`.
 
 These rules apply to `default` and to elements of newly allocated arrays:
 

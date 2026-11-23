@@ -5,7 +5,9 @@
 - **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;
   combinators that inspect it throw `SwitchExpressionException`. Use `Option.None` for absence.
   The NuGet package includes analyzer error `DRL001` for explicit `default` and
-  parameterless construction of an option.
+  parameterless construction of an `Option`, `Result` or `Validation`. The analyzer can't
+  see unassigned fields, array slots, generic `default(T)` or serializer output; see
+  "Default initialization" in the README.
   This reverses the 0.7.0 behavior on purpose: an option you forgot to initialize now fails
   loudly instead of silently meaning absent, as `default` already does for `Result` and `Validation`.
 

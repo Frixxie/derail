@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Derail.Analyzers.Tests;
 
-public class OptionInitializationAnalyzerTests
+public class UnionInitializationAnalyzerTests
 {
     // [| and |] mark the spans that must report DRL001.
     [Theory]
@@ -16,6 +16,10 @@ public class OptionInitializationAnalyzerTests
     [InlineData("static Option<int> Parameterless() => [|new Option<int>()|];")]
     [InlineData("static Option<int> TargetTypedNew() => [|new()|];")]
     [InlineData("static Option<string>[] Several() => [[|default|], Option.None, [|new()|]];")]
+    [InlineData("static Result<int, string> ResultDefault() => [|default|];")]
+    [InlineData("static Result<int, string> ResultNew() => [|new Result<int, string>()|];")]
+    [InlineData("static Validation<int, string> ValidationDefault() => [|default(Validation<int, string>)|];")]
+    [InlineData("static Validation<int, string> ValidationNew() => [|new()|];")]
     public async Task Explicitly_uninitialized_options_are_errors(string member)
     {
         var (source, expected) = Unmark(member);
@@ -41,11 +45,26 @@ public class OptionInitializationAnalyzerTests
     }
 
     [Theory]
+    [InlineData("static Result<int, string> M() => [|default|];", "Result.Ok(value) or Result.Error(error)")]
+    [InlineData("static Validation<int, string> M() => [|default|];", "Validation.Valid(value) or Validation.Invalid(error)")]
+    [InlineData("static void M(Result<int, string> value = [|default|]) { }", "overload that passes an initialized result")]
+    public async Task Result_and_validation_diagnostics_name_their_own_cases(string member, string guidance)
+    {
+        var (source, _) = Unmark(member);
+        var diagnostic = Assert.Single((await Diagnose(source)).Where(d => d.Severity == DiagnosticSeverity.Error));
+
+        Assert.Equal("DRL001", diagnostic.Id);
+        Assert.Contains(guidance, diagnostic.GetMessage());
+    }
+
+    [Theory]
     [InlineData("static void M() => M(Option.None); static void M(Option<int> value) { }")]
     [InlineData("static Option<int>[] Cases() => [Option.Some(42), Option.None, new(new Some<int>(1)), new(new None())];")]
     [InlineData("static Option<int>? NoNullableValue() => default;")]
     [InlineData("static Option<int>[] ArrayStorage() => new Option<int>[2];")]
     [InlineData("static Other.Option<int> Unrelated() => default;")]
+    [InlineData("static Result<int, string>[] Results() => [Result.Ok<int, string>(1), Result.Error<int, string>(\"e\"), new(new Ok<int>(2))];")]
+    [InlineData("static Validation<int, string> Valid() => Validation.Valid<int, string>(1);")]
     public async Task Initialized_options_and_other_types_compile_cleanly(string member)
     {
         var diagnostics = await Diagnose(member);
@@ -80,7 +99,7 @@ public class OptionInitializationAnalyzerTests
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         return await compilation
-            .WithAnalyzers([new OptionInitializationAnalyzer()])
+            .WithAnalyzers([new UnionInitializationAnalyzer()])
             .GetAllDiagnosticsAsync(TestContext.Current.CancellationToken);
     }
 }
