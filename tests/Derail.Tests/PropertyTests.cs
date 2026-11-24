@@ -37,6 +37,14 @@ public class ResultProperties
 
 public class OptionProperties
 {
+    [Property]
+    public bool Some_RoundTripsNullablePayload_AndIsDistinctFromNone(int? payload)
+    {
+        Option<int?> some = new Some<int?>(payload);
+        return some is Some<int?>(var value) && value == payload
+            && !some.Equals(default(Option<int?>));
+    }
+
     private static Option<int> Make(bool some, int value) =>
         some ? Option.Some(value) : Option.None;
 
@@ -168,6 +176,14 @@ public class ValidationProperties
         return invalid.Errors.Head == errors.Get[0]
             && invalid.Errors.Count == errors.Get.Length
             && invalid.Errors.Tail.SequenceEqual(errors.Get.Skip(1));
+    }
+
+    [Property]
+    public bool Invalid_WithSameOrderedErrors_IsInterchangeableAsAHashKey(int head, int[] tail)
+    {
+        var keys = new HashSet<Invalid<int>> { new(head, tail) };
+        return keys.Contains(new Invalid<int>(head, tail))
+            && !keys.Contains(new Invalid<int>(~head, tail));
     }
 
     [Property]
