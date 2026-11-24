@@ -43,21 +43,16 @@ internal static class OrderEndpoints
                 .BindAsync(replaced => Find(connection, replaced, ct)), token)
             .Match(updated => Results.Ok(updated), Problem));
 
-    public static async Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token)
-    {
-        await using var connection = await db.OpenConnectionAsync(token);
-        var count = await connection.ExecuteAsync(token, "DELETE FROM orders WHERE id = @Id", new { id });
-        return count == 1 ? Results.NoContent() : ApiResults.NotFound("order-not-found");
-    }
+    public static Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token) =>
+        db.InTransaction((connection, ct) => Remove(connection, id, ct), token).Match(_ => Results.NoContent(), Problem);
 
     private static Validation<OrderPage, FieldError> Page(string? limit, string? after, string? shipped) =>
         ApiInput.Optional<int>(limit, "limit", int.TryParse)
             .Map(value => value.GetValueOrDefault(50))
-            .Ensure(value => value is >= 1 and <= 100, _ => new("limit", "out-of-range"))
-            .ToValidation()
+            .Rule(value => value is >= 1 and <= 100, "limit", "out-of-range")
             .Zip(
-                ApiInput.Optional<long>(after, "after", long.TryParse).Map(value => value.GetValueOrDefault(0)).ToValidation(),
-                ApiInput.Optional<bool>(shipped, "shipped", bool.TryParse).ToValidation(),
+                ApiInput.Optional<long>(after, "after", long.TryParse).Map(value => value.GetValueOrDefault(0)),
+                ApiInput.Optional<bool>(shipped, "shipped", bool.TryParse),
                 (pageLimit, pageAfter, pageShipped) => new OrderPage(pageLimit, pageAfter, pageShipped));
 
     private static Validation<NewOrder, FieldError> Validate(OrderRequest request) =>
@@ -93,18 +88,22 @@ internal static class OrderEndpoints
         Option.FromNullable((await connection.ReadAsync<Order>(token, query, arguments)).SingleOrDefault())
             .ToResult(() => OrderError.NotFound);
 
-    // Fails with the idempotency key when an order already uses it.
-    private static async Task<Result<long, string>> Insert(NpgsqlConnection connection, NewOrder order, string? key, CancellationToken token)
-    {
-        var ids = (await connection.ReadAsync<long>(token, """
-            INSERT INTO orders (description, idempotency_key) VALUES (@Description, @Key)
-            ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
-            """, new { order.Description, key })).ToList();
-        // Only a supplied key can conflict.
-        if (ids.Count == 0) return Result.Error<long, string>(key!);
-        await InsertLines(connection, ids[0], order.Lines, token);
-        return Result.Ok<long, string>(ids[0]);
-    }
+    // Fails with the idempotency key when an order already uses it; only a supplied key can conflict.
+    private static async Task<Result<long, string>> Insert(NpgsqlConnection connection, NewOrder order, string? key, CancellationToken token) =>
+        await Option.FromNullable((await connection.ReadAsync<long?>(token, """
+                INSERT INTO orders (description, idempotency_key) VALUES (@Description, @Key)
+                ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
+                """, new { order.Description, key })).SingleOrDefault())
+            .ToResult(() => key!)
+            .MapAsync(async id =>
+            {
+                await InsertLines(connection, id, order.Lines, token);
+                return id;
+            });
+
+    private static async Task<Result<long, OrderError>> Remove(NpgsqlConnection connection, long id, CancellationToken token) =>
+        Option.FromNullable((await connection.ReadAsync<long?>(token, "DELETE FROM orders WHERE id = @Id RETURNING id", new { id })).SingleOrDefault())
+            .ToResult(() => OrderError.NotFound);
 
     // A retry with the same key and order gets the original order; a different order is rejected.
     private static async Task<Result<long, OrderError>> Replay(NpgsqlConnection connection, string key, NewOrder order, CancellationToken token) =>

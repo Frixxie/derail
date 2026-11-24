@@ -176,6 +176,21 @@ public sealed class CrudTests(OrdersApi api) : IClassFixture<OrdersApi>
         Assert.Equal("Sample", await api.Scalar<string>("SELECT description FROM orders WHERE id = $1", id));
     }
 
+    [Fact]
+    public async Task Deleting_an_order_twice_reports_the_missing_order()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var created = await api.Client.PostAsJsonAsync("/orders", new { description = "Sample", lines = OneLine }, token);
+        var path = $"/orders/{Assert.IsType<Order>(await created.Content.ReadFromJsonAsync<Order>(token)).Id}";
+
+        Assert.Equal(HttpStatusCode.NoContent, (await api.Client.DeleteAsync(path, token)).StatusCode);
+        var again = await api.Client.DeleteAsync(path, token);
+
+        Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
+        var problem = await again.Content.ReadFromJsonAsync<JsonElement>(token);
+        Assert.Equal("order-not-found", problem.GetProperty("code").GetString());
+    }
+
     private static async Task<Dictionary<string, string[]>?> Errors(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

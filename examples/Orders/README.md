@@ -17,10 +17,12 @@ Two more endpoints change shipments: `PUT /orders/{id}/shipment/delivery` marks 
 
 ## How it uses Derail
 
-- **`Result.Ensure`** chains the rules for one [field](ApiInput.cs), so each field reports its first failed rule.
+Incoming values and database work use different types on purpose. Input is checked with `Validation`, so a client sees every invalid field in one `400`. Database steps use `Option` for a row that may be missing and `Result` for a step that can fail, so a workflow stops at its first failure.
+
+- **`Validation.AndThen`** chains the rules for one [field](ApiInput.cs), so each field reports its first failed rule.
 - **`Validation.Zip`** combines independent fields, so one `400` lists every invalid field.
 - **`NonEmpty`, `Validation.Traverse` and `MapErrors`** validate [order lines](OrderEndpoints.cs). Traversing a `NonEmpty` keeps the validated lines non-empty, and `MapErrors` prefixes each error with its line, such as `lines[2].quantity`. The [shipment import](ShipmentEndpoints.cs) validates its rows in the same way.
-- **`Option`** marks absent values: a missing row, an unset query parameter (`GetValueOrDefault` supplies the default and `Match` builds the optional `shipped` filter), and an unshipped order, where `Zip` combines carrier and tracking.
+- **`Option`** marks absent values: an unset query parameter (`GetValueOrDefault` supplies the default and `Match` builds the optional `shipped` filter), a row a query did not return (no order, no inserted ID because the idempotency key is taken, nothing deleted), and an unshipped order, where `Zip` combines carrier and tracking.
 - **Async `Result` pipelines** compose a workflow from steps that take the connection and token. `ToResult` turns a missing row into a typed error, `Ensure` applies a rule such as the delivery rule, `BindAsync` runs the next fallible step, and `MapAsync` runs a write that cannot fail with a domain error. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success. The import loops over its rows instead of chaining a `Bind` per row.
 - **Typed errors:** `ShipmentError` and `OrderError` say why a step failed, and one `switch` for each resource maps them to `404`, `409` or `422`.
 - **SQL** is always a compile-time constant with parameters for every input, including the list filters.
