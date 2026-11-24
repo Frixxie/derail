@@ -151,6 +151,18 @@ public class ValidationTests
             Parse("x").Zip(Parse("2"), Parse("z"), (a, b, c) => a + b + c)
                 .Should().Be(Validation.Invalid<int, string>("'x' is not a number", "'z' is not a number"));
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void InvalidInput_DoesNotHideAnUninitializedInput(bool defaultOnLeft)
+        {
+            Validation<int, string> uninitialized = default;
+            var invalid = Parse("x");
+            var (left, right) = defaultOnLeft ? (uninitialized, invalid) : (invalid, uninitialized);
+
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => left.Zip(right, (a, b) => a + b));
+        }
+
         [Fact]
         public void ThreeWay_CombinesValidValues() =>
             Parse("1").Zip(Parse("2"), Parse("3"), (a, b, c) => a + b + c)

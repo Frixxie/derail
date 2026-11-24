@@ -127,8 +127,8 @@ public static class ValidationExtensions
             {
                 (Valid<T> a, Valid<TOther> b) => new Valid<TResult>(combine(a.Value, b.Value)),
                 (Invalid<TError> a, Invalid<TError> b) => a.Concat(b),
-                (Invalid<TError> a, _) => a,
-                (_, Invalid<TError> b) => b,
+                (Invalid<TError> a, Valid<TOther>) => a,
+                (Valid<T>, Invalid<TError> b) => b,
             };
 
         /// <summary>Combines three validations, collecting the errors of all.</summary>
