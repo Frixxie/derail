@@ -101,12 +101,14 @@ Result<decimal, TransferError> balance = logged.Map((Account a) => a.Balance);
 When later steps need several earlier values, use query syntax:
 
 ```csharp
-Result<Receipt, TransferError> Transfer(string from, string to, decimal amount) =>
-    from source  in OpenAccount(from)
-    from target  in OpenAccount(to)
-    from debited in Withdraw(source, amount)
-    let credited = Deposit(target, amount)
-    select new Receipt(source.Number, target.Number, debited.Balance, credited.Balance);
+Result<Receipt, TransferError> Transfer(string fromInput, string toInput, decimal amount) =>
+    from value in EnsurePositive(amount)
+    from source in OpenAccount(fromInput)
+    from target in OpenAccount(toInput)
+    from _ in EnsureDifferent(source, target)
+    from debited in Withdraw(source, value)
+    let credited = Deposit(target, value)
+    select new Receipt(source.Number, target.Number, value, debited.Balance, credited.Balance);
 ```
 
 Handle the outcome with `Match`, a `switch`, or translate errors with `MapError`:
