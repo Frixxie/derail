@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
 
 - **Breaking:** Removed `Reader`, `ReaderResult`, `AsyncReaderResult`, and `Writer`.
   Pass dependencies as ordinary parameters and compose `Task<Result<T, TError>>`
@@ -15,6 +15,8 @@
   still treats the entire error payload as one error.
 
 - Three- and four-way `Validation.Zip` copy errors once instead of once per pairwise step.
+
+- Added a [Derail skill for AI agents](.agents/skills/derail/SKILL.md) with examples of composing primitives and handling outcomes with C# switch expressions.
 
 - Property tests now use generated functions for the `Result` monad laws and the
   `Validation` applicative laws, and check the monad laws for `BindAsync` on
