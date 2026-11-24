@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
+
+### Behavior changes
 
 - `default(Option<T>)` now behaves as `None` in pattern matching, equality, and all combinators. Previously it matched neither case.
 - `Validation.Zip` now rejects an uninitialized input even when the other input is `Invalid`, consistent with `Validation.Sequence`.
