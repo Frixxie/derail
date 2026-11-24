@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
 - **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;
   combinators that inspect it throw `SwitchExpressionException`. Use `Option.None` for absence.

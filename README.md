@@ -29,7 +29,7 @@ dotnet add package Derail
 Derail is developed on the `0.x` release line. The public API can evolve between
 releases; check the changelog when upgrading.
 
-### Unreleased changes since 0.7.0
+### Upgrading to 0.8.0
 
 Three changes may affect existing code:
 
