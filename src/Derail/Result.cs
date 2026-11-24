@@ -101,7 +101,7 @@ public static class ResultExtensions
             Func<T, TNext, TResult> project) =>
             result.Bind(v => bind(v).Map(n => project(v, n)));
 
-        /// <summary>Combines two results; returns the first error without evaluating further.</summary>
+        /// <summary>Combines two already-evaluated results. Returns the first error and calls <paramref name="combine"/> only when both succeed.</summary>
         public Result<TResult, TError> Zip<TOther, TResult>(
             Result<TOther, TError> other,
             Func<T, TOther, TResult> combine) =>

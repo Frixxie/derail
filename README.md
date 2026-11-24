@@ -39,6 +39,8 @@ Use `Ensure` to reject a successful value that fails a rule, and `Tap` for a syn
 
 The examples below come from [`BankingExamples.cs`](tests/Derail.Tests/BankingExamples.cs), where they run as tests.
 
+The examples often spell out types to show what each step receives and returns. In your own code, C# can usually infer them: `.Map((Account a) => a.Balance)` can be written as `.Map(a => a.Balance)`.
+
 ### Option: values that may be missing
 
 `default(Option<T>)` is `None`, including in newly allocated arrays. It matches the
@@ -85,6 +87,8 @@ Result<decimal, TransferError> balance = ParseAccountNumber(input)
     .Tap((Account _) => log.WriteLine("Withdrawal completed"))
     .Map((Account a) => a.Balance);
 ```
+
+Use `Zip` to combine two results you already have. In `first.Zip(GetSecond(), combine)`, C# calls `GetSecond()` even if `first` is an error; only `combine` is skipped. Use `first.Bind(a => GetSecond().Map(b => combine(a, b)))` when the second operation should run only after the first succeeds.
 
 When later steps need earlier values, use query syntax:
 
