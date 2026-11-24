@@ -322,8 +322,8 @@ public class ValidationProperties
             e => !ok && e.Count > 0 && e.SequenceEqual(errors.Get));
 
     [Property]
-    public bool ToResult_ThenToValidation_RoundTrips(bool ok, int value, NonEmptyArray<string> errors) =>
-        Make(ok, value, errors).ToResult().ToValidation().Equals(Make(ok, value, errors));
+    public bool ToResult_ThenToValidationFromErrors_RoundTrips(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).ToResult().ToValidationFromErrors().Equals(Make(ok, value, errors));
 
     [Property]
     public bool ThreeWayZip_MatchesNestedBinaryZip(
@@ -341,7 +341,7 @@ public class ValidationProperties
     {
         Validation<int, string> Next(int x) => Option.FromNullable(f(x)).ToValidation(() => "missing");
         var source = Make(ok, value, errors);
-        return source.AndThen(Next).Equals(source.ToResult().Bind(x => Next(x).ToResult()).ToValidation());
+        return source.AndThen(Next).Equals(source.ToResult().Bind(x => Next(x).ToResult()).ToValidationFromErrors());
     }
 
     [Property]

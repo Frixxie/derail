@@ -149,7 +149,7 @@ string summary = ValidateApplication("", "12", 10m).Match(
 
 - `Validation.Sequence` / `Validation.Traverse` validate a whole batch.
 - `AndThen` runs a dependent check, but short-circuits like `Bind`.
-- `ToResult()` continues in a `Result` pipeline as `Result<T, NonEmpty<TError>>`; `ToValidation()` goes back.
+- `ToResult()` continues in a `Result` pipeline as `Result<T, NonEmpty<TError>>`. Use `ToValidationFromErrors()` to restore the individual errors in order, or `ToValidation()` to keep the collection as one error.
 
 ## NonEmpty
 
@@ -205,7 +205,7 @@ Option<int> three = Option.Some(Option.Some(3)).Flatten();
 | Combine | `Zip`, `Apply` | `Zip`, `Apply` | `Zip`, `Apply` (all errors) |
 | Collect | `Sequence`, `Traverse` | `Sequence`, `Traverse` | `Sequence`, `Traverse` |
 | Exit | `Match`, `GetValueOrDefault`, `GetValueOrElse` | same | same |
-| Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation` | `ToResult` |
+| Convert | `ToResult`, `ToValidation` | `ToOption`, `ToValidation`, `ToValidationFromErrors` | `ToResult` |
 
 ## More
 

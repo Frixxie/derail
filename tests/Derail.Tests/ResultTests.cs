@@ -419,8 +419,21 @@ public class ResultTests
     public class ToValidation
     {
         [Fact]
-        public void RejectsMissingErrorCollection() =>
-            Assert.Throws<ArgumentNullException>(() => Result.Error<int, NonEmpty<string>>(null!).ToValidation());
+        public void CollectionIsOneErrorForBothDirectAndGenericCalls()
+        {
+            static Validation<T, E> Convert<T, E>(Result<T, E> result) => result.ToValidation();
+
+            var errors = new NonEmpty<string>("first", "second");
+            var result = Result.Error<int, NonEmpty<string>>(errors);
+            var expected = Validation.Invalid<int, NonEmpty<string>>(errors);
+
+            Assert.Equal(expected, Convert(result));
+            Assert.Equal(expected, result.ToValidation());
+        }
+
+        [Fact]
+        public void ToValidationFromErrorsRejectsMissingCollection() =>
+            Assert.Throws<ArgumentNullException>(() => Result.Error<int, NonEmpty<string>>(null!).ToValidationFromErrors());
 
         [Fact]
         public void OkBecomesValid() =>

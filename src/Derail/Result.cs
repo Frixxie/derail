@@ -168,7 +168,7 @@ public static class ResultExtensions
     extension<T, TError>(Result<T, NonEmpty<TError>> result)
     {
         /// <summary>Converts to a validation whose errors are the collected errors, inverting <c>Validation.ToResult</c>.</summary>
-        public Validation<T, TError> ToValidation() =>
+        public Validation<T, TError> ToValidationFromErrors() =>
             result switch
             {
                 Ok<T> o => new Valid<T>(o.Value),

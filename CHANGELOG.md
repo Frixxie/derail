@@ -10,9 +10,9 @@
 - Added `Validation.AndThen` for checks that depend on an earlier valid value. It
   short-circuits like `Result.Bind` and is deliberately not named `Bind`.
 
-- **Breaking:** `Result<T, NonEmpty<TError>>.ToValidation()` now returns
-  `Validation<T, TError>` with the original errors, reversing `Validation.ToResult()`.
-  Previously it returned `Validation<T, NonEmpty<TError>>` with one wrapped error.
+- Added `Result<T, NonEmpty<TError>>.ToValidationFromErrors()` to reverse
+  `Validation.ToResult()` and preserve individual errors in order. `ToValidation()`
+  still treats the entire error payload as one error.
 
 - Three- and four-way `Validation.Zip` copy errors once instead of once per pairwise step.
 
