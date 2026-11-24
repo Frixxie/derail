@@ -44,6 +44,7 @@ public class RestockingExamplesTests
     // Discontinued is checked before capacity, so only the first broken rule is reported.
     [InlineData("NUT", 1_000, "discontinued")]
     [InlineData("BOLT", 91, "over-capacity")]
+    [InlineData("BOLT", int.MaxValue, "over-capacity")]
     public void Store_workflow_stops_at_the_first_failure(string sku, int quantity, string kind)
     {
         StockError expected = kind switch
@@ -82,6 +83,6 @@ public class RestockingExamplesTests
     [Property]
     public bool On_hand_never_exceeds_capacity(PositiveInt quantity) =>
         Restocking.Handle(Store, new RestockRequest("bolt", quantity.Get)).Match(
-            saved => saved.Item.OnHand <= Store.Capacity && saved.Item.OnHand == 10 + quantity.Get,
-            failure => failure is RestockFailure.Rejected(StockError.OverCapacity) && 10 + quantity.Get > Store.Capacity);
+            saved => saved.Item.OnHand <= Store.Capacity && saved.Item.OnHand == 10L + quantity.Get,
+            failure => failure is RestockFailure.Rejected(StockError.OverCapacity) && 10L + quantity.Get > Store.Capacity);
 }

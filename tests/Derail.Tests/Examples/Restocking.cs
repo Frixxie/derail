@@ -51,7 +51,7 @@ internal static class Restocking
         store.Find(restock.Sku)
             .ToResult(StockError () => new StockError.UnknownSku(restock.Sku))
             .Ensure(item => !item.Discontinued, StockError (item) => new StockError.Discontinued(item.Sku))
-            .Ensure(item => item.OnHand + restock.Quantity <= store.Capacity,
+            .Ensure(item => restock.Quantity <= store.Capacity - item.OnHand,
                 StockError (item) => new StockError.OverCapacity(item.Sku, restock.Quantity, store.Capacity - item.OnHand))
             .Map(item => item with { OnHand = item.OnHand + restock.Quantity })
             .Map(item => (store.Save(item), item));
