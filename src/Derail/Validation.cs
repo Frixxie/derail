@@ -13,7 +13,7 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     public Invalid(TError error, params ReadOnlySpan<TError> more) =>
         Errors = new(error, more);
 
-    internal Invalid(NonEmpty<TError> errors) => Errors = errors;
+    internal Invalid(NonEmpty<TError> errors) => Errors = errors ?? throw new ArgumentNullException(nameof(errors));
 
     /// <summary>The errors, always containing at least one element.</summary>
     public NonEmpty<TError> Errors { get; }

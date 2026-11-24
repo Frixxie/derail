@@ -419,6 +419,10 @@ public class ResultTests
     public class ToValidation
     {
         [Fact]
+        public void RejectsMissingErrorCollection() =>
+            Assert.Throws<ArgumentNullException>(() => Result.Error<int, NonEmpty<string>>(null!).ToValidation());
+
+        [Fact]
         public void OkBecomesValid() =>
             Parse("1").ToValidation().Should().Be(Validation.Valid<int, string>(1));
 
