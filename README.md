@@ -306,6 +306,18 @@ string summary = ValidateApplication("", "12", 10m).Match(
 // "Owner is required (2 more problems)"
 ```
 
+When a check needs a value that an earlier check produced, use `AndThen`. Unlike `Zip`,
+it short-circuits: the later check runs only on a valid value, so errors from both
+checks are never collected together. Keep `Zip` for independent checks.
+
+```csharp
+Validation<Amount, string> deposit = ParseAmount(raw).AndThen(amount => CheckLimit(amount));
+```
+
+`Result<T, NonEmpty<TError>>.ToValidation()` reverses `ToResult()`, so
+`validation.ToResult().ToValidation()` returns the original errors rather than a
+single `NonEmpty` error.
+
 `Invalid<TError>` is a sealed class whose `Errors` is a `NonEmpty<TError>`: every
 constructed failure contains at least one error. `Match` receives that non-empty
 collection, and `ToResult()` returns `Result<T, NonEmpty<TError>>`. Mapping and

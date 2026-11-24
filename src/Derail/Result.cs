@@ -165,6 +165,17 @@ public static class ResultExtensions
         public Result<T, TError> Flatten() => nested.Bind(static inner => inner);
     }
 
+    extension<T, TError>(Result<T, NonEmpty<TError>> result)
+    {
+        /// <summary>Converts to a validation whose errors are the collected errors, inverting <c>Validation.ToResult</c>.</summary>
+        public Validation<T, TError> ToValidation() =>
+            result switch
+            {
+                Ok<T> o => new Valid<T>(o.Value),
+                Error<NonEmpty<TError>> e => new Invalid<TError>(e.Value),
+            };
+    }
+
     extension<T, TResult, TError>(Result<Func<T, TResult>, TError> function)
     {
         /// <summary>Applies a wrapped function to a wrapped value; returns the first error.</summary>

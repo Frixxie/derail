@@ -7,6 +7,19 @@
   pipelines with `BindAsync`, `MapAsync`, and `RecoverAsync`; return events as
   plain data alongside the value. The orders example shows both approaches.
 
+- Added `Validation.AndThen` for checks that depend on an earlier valid value. It
+  short-circuits like `Result.Bind` and is deliberately not named `Bind`.
+
+- **Breaking:** `Result<T, NonEmpty<TError>>.ToValidation()` now returns
+  `Validation<T, TError>` with the original errors, reversing `Validation.ToResult()`.
+  Previously it returned `Validation<T, NonEmpty<TError>>` with one wrapped error.
+
+- Three- and four-way `Validation.Zip` copy errors once instead of once per pairwise step.
+
+- Property tests now use generated functions for the `Result` monad laws and the
+  `Validation` applicative laws, and check the monad laws for `BindAsync` on
+  `Task` and `ValueTask`.
+
 ## 0.8.0
 
 - **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;

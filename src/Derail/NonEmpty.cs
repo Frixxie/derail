@@ -13,7 +13,7 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
     /// <summary>Creates a collection from its first element and a snapshot of its tail.</summary>
     public NonEmpty(T head, params ReadOnlySpan<T> tail) : this(head, ImmutableArray.Create(tail)) { }
 
-    private NonEmpty(T head, ImmutableArray<T> tail)
+    internal NonEmpty(T head, ImmutableArray<T> tail)
     {
         Head = head;
         _tail = tail;
@@ -41,6 +41,8 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
         destination.Add(Head);
         destination.AddRange(_tail);
     }
+
+    internal void CopyTailTo(ImmutableArray<T>.Builder destination) => destination.AddRange(_tail);
 
     /// <summary>Tests whether both collections have equal elements in the same order.</summary>
     public bool Equals(NonEmpty<T>? other) => ReferenceEquals(this, other)

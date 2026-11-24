@@ -86,6 +86,21 @@ public class ResultTests
         }
 
         [Fact]
+        public async Task Default_IsRejectedByEveryMonadicOperation()
+        {
+            Result<int, string> result = default;
+            Result<Result<int, string>, string> nested = default;
+            Result<Func<int, int>, string> function = default;
+
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.Map(x => x));
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.Bind(Result.Ok<int, string>));
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => nested.Flatten());
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => function.Apply(Result.Ok<int, string>(1)));
+            await Assert.ThrowsAsync<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.BindAsync(x => Task.FromResult(Result.Ok<int, string>(x))));
+            await Assert.ThrowsAsync<System.Runtime.CompilerServices.SwitchExpressionException>(() => result.BindAsync(x => ValueTask.FromResult(Result.Ok<int, string>(x))).AsTask());
+        }
+
+        [Fact]
         public void Zip_InspectsTheRightOperandOnlyAfterSuccess()
         {
             Result<int, string> right = default;

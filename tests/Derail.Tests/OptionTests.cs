@@ -110,6 +110,9 @@ public class OptionTests
         {
             Option<int> option = default;
             Assert.Throws<SwitchExpressionException>(() => option.Map(x => x.ToString()));
+            Assert.Throws<SwitchExpressionException>(() => option.Bind(Option.Some));
+            Assert.Throws<SwitchExpressionException>(() => default(Option<Option<int>>).Flatten());
+            Assert.Throws<SwitchExpressionException>(() => default(Option<Func<int, int>>).Apply(Option.Some(1)));
             await Assert.ThrowsAsync<SwitchExpressionException>(() => option.MapAsync(x => Task.FromResult(x.ToString())));
             await Assert.ThrowsAsync<SwitchExpressionException>(() => option.MapAsync(x => ValueTask.FromResult(x.ToString())).AsTask());
         }

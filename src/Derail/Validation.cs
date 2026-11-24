@@ -13,7 +13,7 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     public Invalid(TError error, params ReadOnlySpan<TError> more) =>
         Errors = new(error, more);
 
-    private Invalid(NonEmpty<TError> errors) => Errors = errors;
+    internal Invalid(NonEmpty<TError> errors) => Errors = errors;
 
     /// <summary>The errors, always containing at least one element.</summary>
     public NonEmpty<TError> Errors { get; }
@@ -22,6 +22,25 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     public void Deconstruct(out NonEmpty<TError> errors) => errors = Errors;
 
     internal Invalid<TError> Concat(Invalid<TError> other) => new(Errors.Append(other.Errors));
+
+    // Joins every present error group in one copy, so multi-way Zip stays linear in the number of errors.
+    internal static Invalid<TError> Collect(params ReadOnlySpan<NonEmpty<TError>?> groups)
+    {
+        NonEmpty<TError>? first = null;
+        var tail = ImmutableArray.CreateBuilder<TError>();
+        foreach (var group in groups)
+        {
+            if (group is null) continue;
+            if (first is null)
+            {
+                first = group;
+                group.CopyTailTo(tail);
+            }
+            else group.CopyTo(tail);
+        }
+        var head = first ?? throw new System.Diagnostics.UnreachableException("Collect requires at least one error group.");
+        return new(new NonEmpty<TError>(head.Head, tail.DrainToImmutable()));
+    }
 
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
         new(Errors.Map(map));
@@ -101,7 +120,7 @@ public static class Validation
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(map);
         var mapped = source.Map(map);
-        return mapped.Head.Zip(Sequence(mapped.Tail), static (head, tail) => new NonEmpty<T>(head, [.. tail]));
+        return mapped.Head.Zip(Sequence(mapped.Tail), static (head, tail) => new NonEmpty<T>(head, ImmutableArray.CreateRange(tail)));
     }
 }
 
@@ -157,9 +176,11 @@ public static class ValidationExtensions
             Validation<T2, TError> second,
             Validation<T3, TError> third,
             Func<T, T2, T3, TResult> combine) =>
-            validation
-                .Zip(second, (a, b) => (a, b))
-                .Zip(third, (ab, c) => combine(ab.a, ab.b, c));
+            (validation, second, third) switch
+            {
+                (Valid<T> a, Valid<T2> b, Valid<T3> c) => new Valid<TResult>(combine(a.Value, b.Value, c.Value)),
+                _ => Invalid<TError>.Collect(ErrorsOf(validation), ErrorsOf(second), ErrorsOf(third)),
+            };
 
         /// <summary>Collects errors from four validations in order. Invokes the combiner only if all four are valid.</summary>
         public Validation<TResult, TError> Zip<T2, T3, T4, TResult>(
@@ -167,8 +188,23 @@ public static class ValidationExtensions
             Validation<T3, TError> third,
             Validation<T4, TError> fourth,
             Func<T, T2, T3, T4, TResult> combine) =>
-            validation.Zip(second, third, static (a, b, c) => (a, b, c))
-                .Zip(fourth, (abc, d) => combine(abc.a, abc.b, abc.c, d));
+            (validation, second, third, fourth) switch
+            {
+                (Valid<T> a, Valid<T2> b, Valid<T3> c, Valid<T4> d) => new Valid<TResult>(combine(a.Value, b.Value, c.Value, d.Value)),
+                _ => Invalid<TError>.Collect(ErrorsOf(validation), ErrorsOf(second), ErrorsOf(third), ErrorsOf(fourth)),
+            };
+
+        /// <summary>
+        /// Chains a validation that depends on the valid value. Unlike <c>Zip</c>, this short-circuits:
+        /// when invalid, <paramref name="next"/> is not invoked and its errors are not collected.
+        /// Use <c>Zip</c> for independent checks and this only when a check needs an earlier value.
+        /// </summary>
+        public Validation<TResult, TError> AndThen<TResult>(Func<T, Validation<TResult, TError>> next) =>
+            validation switch
+            {
+                Valid<T> v => next(v.Value),
+                Invalid<TError> i => i,
+            };
 
         /// <summary>Returns the value, or <paramref name="fallback"/> when invalid.</summary>
         public T GetValueOrDefault(T fallback) => validation.Match(v => v, _ => fallback);
@@ -187,4 +223,12 @@ public static class ValidationExtensions
         public Validation<TResult, TError> Apply(Validation<T, TError> argument) =>
             function.Zip(argument, (f, x) => f(x));
     }
+
+    // Null for a valid input; an uninitialized input throws rather than being treated as valid.
+    private static NonEmpty<TError>? ErrorsOf<T, TError>(Validation<T, TError> validation) =>
+        validation switch
+        {
+            Valid<T> => null,
+            Invalid<TError> i => i.Errors,
+        };
 }

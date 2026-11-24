@@ -39,30 +39,48 @@ public class ResultProperties
     private static Result<int, string> Make(bool ok, int value, string error) =>
         ok ? Result.Ok<int, string>(value) : Result.Error<int, string>(error);
 
-    private static Result<int, string> Half(int x) =>
-        x % 2 == 0 ? Result.Ok<int, string>(x / 2) : Result.Error<int, string>("odd");
+    // Lifts a generated partial function into a fallible continuation whose error names the step.
+    private static Func<int, Result<int, string>> Fallible(Func<int, int?> f, string step) =>
+        x => Option.FromNullable(f(x)).ToResult(() => step);
 
     [Property]
     public bool Map_Identity(bool ok, int value, string error) =>
         Make(ok, value, error).Map(x => x).Equals(Make(ok, value, error));
 
     [Property]
-    public bool Map_Composition(bool ok, int value, string error) =>
-        Make(ok, value, error).Map(x => x + 1).Map(x => x * 3)
-            .Equals(Make(ok, value, error).Map(x => (x + 1) * 3));
+    public bool Map_Composition(bool ok, int value, string error, Func<int, int> f, Func<int, int> g) =>
+        Make(ok, value, error).Map(f).Map(g)
+            .Equals(Make(ok, value, error).Map(x => g(f(x))));
 
     [Property]
-    public bool Bind_LeftIdentity(int value) =>
-        Result.Ok<int, string>(value).Bind(Half).Equals(Half(value));
+    public bool Bind_LeftIdentity(int value, Func<int, int?> f)
+    {
+        var next = Fallible(f, "f");
+        return Result.Ok<int, string>(value).Bind(next).Equals(next(value));
+    }
 
     [Property]
     public bool Bind_RightIdentity(bool ok, int value, string error) =>
         Make(ok, value, error).Bind(Result.Ok<int, string>).Equals(Make(ok, value, error));
 
     [Property]
-    public bool Bind_Associativity(bool ok, int value, string error) =>
-        Make(ok, value, error).Bind(Half).Bind(Half)
-            .Equals(Make(ok, value, error).Bind(x => Half(x).Bind(Half)));
+    public bool Bind_Associativity(bool ok, int value, string error, Func<int, int?> f, Func<int, int?> g)
+    {
+        var first = Fallible(f, "f");
+        var second = Fallible(g, "g");
+        return Make(ok, value, error).Bind(first).Bind(second)
+            .Equals(Make(ok, value, error).Bind(x => first(x).Bind(second)));
+    }
+
+    [Property]
+    public bool Recover_IsBindOnTheErrorSide(bool ok, int value, string error, Func<string, int?> f)
+    {
+        Result<int, string> Handle(string e) => Option.FromNullable(f(e)).ToResult(() => e + "!");
+        var source = Make(ok, value, error);
+        return source.Recover(Handle).Equals(source.Match(Result.Ok<int, string>, Handle))
+            && Result.Error<int, string>(error).Recover(Handle).Equals(Handle(error))
+            && source.Recover(Result.Error<int, string>).Equals(source);
+    }
 }
 
 public class OptionProperties
@@ -157,8 +175,8 @@ public class ValidationProperties
     private static Validation<int, string> Make(bool ok, int value, NonEmptyArray<string> errors) =>
         Make<int>(ok, value, errors);
 
-    private static Validation<Func<int, int>, string> MakeFn(bool ok, int k, NonEmptyArray<string> errors) =>
-        Make<Func<int, int>>(ok, x => x + k, errors);
+    private static Validation<Func<int, int>, string> MakeFn(bool ok, Func<int, int> f, NonEmptyArray<string> errors) =>
+        Make(ok, f, errors);
 
     private static IReadOnlyList<string> Errors<T>(Validation<T, string> v) => v.Match(IReadOnlyList<string> (_) => [], e => e);
 
@@ -177,23 +195,23 @@ public class ValidationProperties
             .Equals(Make(ok, value, errors));
 
     [Property]
-    public bool Apply_Homomorphism(int k, int value) =>
-        Validation.Valid<Func<int, int>, string>(x => x + k).Apply(Validation.Valid<int, string>(value))
-            .Equals(Validation.Valid<int, string>(value + k));
+    public bool Apply_Homomorphism(Func<int, int> f, int value) =>
+        Validation.Valid<Func<int, int>, string>(f).Apply(Validation.Valid<int, string>(value))
+            .Equals(Validation.Valid<int, string>(f(value)));
 
     [Property]
-    public bool Apply_Interchange(bool ok, int k, NonEmptyArray<string> errors, int y) =>
-        MakeFn(ok, k, errors).Apply(Validation.Valid<int, string>(y))
-            .Equals(Validation.Valid<Func<Func<int, int>, int>, string>(f => f(y)).Apply(MakeFn(ok, k, errors)));
+    public bool Apply_Interchange(bool ok, Func<int, int> f, NonEmptyArray<string> errors, int y) =>
+        MakeFn(ok, f, errors).Apply(Validation.Valid<int, string>(y))
+            .Equals(Validation.Valid<Func<Func<int, int>, int>, string>(g => g(y)).Apply(MakeFn(ok, f, errors)));
 
     [Property]
     public bool Apply_Composition(
-        bool uOk, int uK, NonEmptyArray<string> uErrors,
-        bool vOk, int vK, NonEmptyArray<string> vErrors,
+        bool uOk, Func<int, int> uf, NonEmptyArray<string> uErrors,
+        bool vOk, Func<int, int> vf, NonEmptyArray<string> vErrors,
         bool wOk, int w, NonEmptyArray<string> wErrors)
     {
-        var u = MakeFn(uOk, uK, uErrors);
-        var v = MakeFn(vOk, vK, vErrors);
+        var u = MakeFn(uOk, uf, uErrors);
+        var v = MakeFn(vOk, vf, vErrors);
         var x = Make(wOk, w, wErrors);
         Func<Func<int, int>, Func<Func<int, int>, Func<int, int>>> compose = f => g => a => f(g(a));
 
@@ -302,6 +320,36 @@ public class ValidationProperties
         Make(ok, value, errors).ToResult().Match(
             v => ok && v == value,
             e => !ok && e.Count > 0 && e.SequenceEqual(errors.Get));
+
+    [Property]
+    public bool ToResult_ThenToValidation_RoundTrips(bool ok, int value, NonEmptyArray<string> errors) =>
+        Make(ok, value, errors).ToResult().ToValidation().Equals(Make(ok, value, errors));
+
+    [Property]
+    public bool ThreeWayZip_MatchesNestedBinaryZip(
+        bool aOk, int a, NonEmptyArray<string> aErrors,
+        bool bOk, int b, NonEmptyArray<string> bErrors,
+        bool cOk, int c, NonEmptyArray<string> cErrors)
+    {
+        var (va, vb, vc) = (Make(aOk, a, aErrors), Make(bOk, b, bErrors), Make(cOk, c, cErrors));
+        return va.Zip(vb, vc, (x, y, z) => (x, y, z))
+            .Equals(va.Zip(vb, (x, y) => (x, y)).Zip(vc, (xy, z) => (xy.x, xy.y, z)));
+    }
+
+    [Property]
+    public bool AndThen_AgreesWithBindThroughResult(bool ok, int value, NonEmptyArray<string> errors, Func<int, int?> f)
+    {
+        Validation<int, string> Next(int x) => Option.FromNullable(f(x)).ToValidation(() => "missing");
+        var source = Make(ok, value, errors);
+        return source.AndThen(Next).Equals(source.ToResult().Bind(x => Next(x).ToResult()).ToValidation());
+    }
+
+    [Property]
+    public bool AndThen_SkipsContinuationWhenInvalid(NonEmptyArray<string> errors)
+    {
+        var source = Make(false, 0, errors);
+        return source.AndThen(Validation<int, string> (_) => throw new InvalidOperationException()).Equals(source);
+    }
 
     [Property]
     public bool Sequence_MatchesZipFold((bool invalid, int value, NonEmptyArray<int> errors)[] items)
