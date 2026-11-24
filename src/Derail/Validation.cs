@@ -24,22 +24,23 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
     internal Invalid<TError> Concat(Invalid<TError> other) => new(Errors.Append(other.Errors));
 
     // Joins every present error group in one copy, so multi-way Zip stays linear in the number of errors.
-    internal static Invalid<TError> Collect(params ReadOnlySpan<NonEmpty<TError>?> groups)
+    internal static Invalid<TError> Collect(params ReadOnlySpan<Invalid<TError>?> failures)
     {
-        NonEmpty<TError>? first = null;
-        var tail = ImmutableArray.CreateBuilder<TError>();
-        foreach (var group in groups)
+        while (!failures.IsEmpty && failures[0] is null) failures = failures[1..];
+        if (failures.IsEmpty) throw new System.Diagnostics.UnreachableException("Collect requires at least one failure.");
+        var first = failures[0]!;
+        var remaining = failures[1..];
+        var extraCount = 0;
+        foreach (var failure in remaining) extraCount = checked(extraCount + (failure?.Errors.Count ?? 0));
+        if (extraCount == 0) return first;
+
+        var tail = ImmutableArray.CreateBuilder<TError>(checked(first.Errors.Count - 1 + extraCount));
+        first.Errors.CopyTailTo(tail);
+        foreach (var failure in remaining)
         {
-            if (group is null) continue;
-            if (first is null)
-            {
-                first = group;
-                group.CopyTailTo(tail);
-            }
-            else group.CopyTo(tail);
+            failure?.Errors.CopyTo(tail);
         }
-        var head = first ?? throw new System.Diagnostics.UnreachableException("Collect requires at least one error group.");
-        return new(new NonEmpty<TError>(head.Head, tail.DrainToImmutable()));
+        return new(new NonEmpty<TError>(first.Errors.Head, tail.MoveToImmutable()));
     }
 
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
@@ -179,7 +180,7 @@ public static class ValidationExtensions
             (validation, second, third) switch
             {
                 (Valid<T> a, Valid<T2> b, Valid<T3> c) => new Valid<TResult>(combine(a.Value, b.Value, c.Value)),
-                _ => Invalid<TError>.Collect(ErrorsOf(validation), ErrorsOf(second), ErrorsOf(third)),
+                _ => Invalid<TError>.Collect(FailureOf(validation), FailureOf(second), FailureOf(third)),
             };
 
         /// <summary>Collects errors from four validations in order. Invokes the combiner only if all four are valid.</summary>
@@ -191,7 +192,7 @@ public static class ValidationExtensions
             (validation, second, third, fourth) switch
             {
                 (Valid<T> a, Valid<T2> b, Valid<T3> c, Valid<T4> d) => new Valid<TResult>(combine(a.Value, b.Value, c.Value, d.Value)),
-                _ => Invalid<TError>.Collect(ErrorsOf(validation), ErrorsOf(second), ErrorsOf(third), ErrorsOf(fourth)),
+                _ => Invalid<TError>.Collect(FailureOf(validation), FailureOf(second), FailureOf(third), FailureOf(fourth)),
             };
 
         /// <summary>
@@ -225,10 +226,10 @@ public static class ValidationExtensions
     }
 
     // Null for a valid input; an uninitialized input throws rather than being treated as valid.
-    private static NonEmpty<TError>? ErrorsOf<T, TError>(Validation<T, TError> validation) =>
+    private static Invalid<TError>? FailureOf<T, TError>(Validation<T, TError> validation) =>
         validation switch
         {
             Valid<T> => null,
-            Invalid<TError> i => i.Errors,
+            Invalid<TError> i => i,
         };
 }
