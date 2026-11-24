@@ -23,9 +23,30 @@ Option, Result, and Validation use real union members, giving you exhaustive `sw
 dotnet add package Derail
 ```
 
+## Quick start: from input to outcome
+
+Paste this into `Program.cs` in a .NET 11 console app after adding Derail:
+
 ```csharp
 using Derail;
+
+Console.WriteLine(Quote("3"));    // Total: 15 credits
+Console.WriteLine(Quote("0"));    // Quantity must be positive
+Console.WriteLine(Quote("ten"));  // Enter a whole number
+
+static string Quote(string input) =>
+    ParseQuantity(input)
+        .Ensure(quantity => quantity > 0, _ => "Quantity must be positive")
+        .Map(quantity => quantity * 5L)
+        .Match(total => $"Total: {total} credits", error => error);
+
+static Result<int, string> ParseQuantity(string input) =>
+    int.TryParse(input, out var quantity)
+        ? new Ok<int>(quantity)
+        : new Error<string>("Enter a whole number");
 ```
+
+`Ensure` checks the parsed quantity, `Map` calculates the price, and `Match` returns the message. If parsing or the quantity check fails, the calculation is skipped and `Match` receives the first error.
 
 ## Intended use
 
