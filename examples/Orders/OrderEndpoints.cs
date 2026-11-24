@@ -29,20 +29,18 @@ internal static class OrderEndpoints
         });
 
     public static Task<IResult> Get(long id, NpgsqlDataSource db, CancellationToken token) =>
-        Find(id).InTransaction(db, token).Match(order => Results.Ok(order), Problem);
+        db.InTransaction((connection, ct) => Find(connection, id, ct), token).Match(order => Results.Ok(order), Problem);
 
     public static Task<IResult> Create(OrderRequest request, [FromHeader(Name = "Idempotency-Key")] string? key,
         NpgsqlDataSource db, CancellationToken token) =>
-        Validate(request).OnValid(order => Insert(order, key)
-            .Recover(usedKey => Replay(usedKey, order))
-            .Bind(Find)
-            .InTransaction(db, token)
+        Validate(request).OnValid(order => db.InTransaction((connection, ct) => Insert(connection, order, key, ct)
+                .RecoverAsync(usedKey => Replay(connection, usedKey, order, ct))
+                .BindAsync(id => Find(connection, id, ct)), token)
             .Match(created => Results.Created($"/orders/{created.Id}", created), Problem));
 
     public static Task<IResult> Update(long id, OrderRequest request, NpgsqlDataSource db, CancellationToken token) =>
-        Validate(request).OnValid(order => Replace(id, order)
-            .Bind(Find)
-            .InTransaction(db, token)
+        Validate(request).OnValid(order => db.InTransaction((connection, ct) => Replace(connection, id, order, ct)
+                .BindAsync(replaced => Find(connection, replaced, ct)), token)
             .Match(updated => Results.Ok(updated), Problem));
 
     public static async Task<IResult> Delete(long id, NpgsqlDataSource db, CancellationToken token)
@@ -87,50 +85,48 @@ internal static class OrderEndpoints
     private const string UnshippedOrders =
         $"{Columns} FROM (SELECT * FROM orders WHERE id > @After AND carrier IS NULL ORDER BY id LIMIT @Limit) o {WithLines}";
 
-    private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> Find(long id) =>
-        FindOne(OrderById, new { id });
+    private static Task<Result<Order, OrderError>> Find(NpgsqlConnection connection, long id, CancellationToken token) =>
+        FindOne(connection, OrderById, new { id }, token);
 
-    private static AsyncReaderResult<NpgsqlConnection, Order, OrderError> FindOne(string query, object arguments) =>
-        AsyncReaderResult.FromLookup<NpgsqlConnection, Order, OrderError>(
-            async (connection, token) => Option.FromNullable((await connection.ReadAsync<Order>(token, query, arguments)).SingleOrDefault()),
-            () => OrderError.NotFound);
+    private static async Task<Result<Order, OrderError>> FindOne(
+        NpgsqlConnection connection, string query, object arguments, CancellationToken token) =>
+        Option.FromNullable((await connection.ReadAsync<Order>(token, query, arguments)).SingleOrDefault())
+            .ToResult(() => OrderError.NotFound);
 
     // Fails with the idempotency key when an order already uses it.
-    private static AsyncReaderResult<NpgsqlConnection, long, string> Insert(NewOrder order, string? key) =>
-        new(async (connection, token) =>
-        {
-            var ids = (await connection.ReadAsync<long>(token, """
-                INSERT INTO orders (description, idempotency_key) VALUES (@Description, @Key)
-                ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
-                """, new { order.Description, key })).ToList();
-            // Only a supplied key can conflict.
-            if (ids.Count == 0) return Result.Error<long, string>(key!);
-            await InsertLines(connection, ids[0], order.Lines, token);
-            return Result.Ok<long, string>(ids[0]);
-        });
+    private static async Task<Result<long, string>> Insert(NpgsqlConnection connection, NewOrder order, string? key, CancellationToken token)
+    {
+        var ids = (await connection.ReadAsync<long>(token, """
+            INSERT INTO orders (description, idempotency_key) VALUES (@Description, @Key)
+            ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
+            """, new { order.Description, key })).ToList();
+        // Only a supplied key can conflict.
+        if (ids.Count == 0) return Result.Error<long, string>(key!);
+        await InsertLines(connection, ids[0], order.Lines, token);
+        return Result.Ok<long, string>(ids[0]);
+    }
 
     // A retry with the same key and order gets the original order; a different order is rejected.
-    private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replay(string key, NewOrder order) =>
-        FindOne(OrderByKey, new { key })
+    private static async Task<Result<long, OrderError>> Replay(NpgsqlConnection connection, string key, NewOrder order, CancellationToken token) =>
+        (await FindOne(connection, OrderByKey, new { key }, token))
             .Ensure(existing => existing.Description == order.Description
                     && existing.Lines.Select(line => new NewOrderLine(line.Sku, line.Quantity)).SequenceEqual(order.Lines),
                 _ => OrderError.KeyReused)
             .Map(existing => existing.Id);
 
     // A delivered order is final, so its description and lines can no longer change.
-    private static AsyncReaderResult<NpgsqlConnection, long, OrderError> Replace(long id, NewOrder order) =>
-        AsyncReaderResult.FromLookup<NpgsqlConnection, bool, OrderError>(
-                async (connection, token) => Option.FromNullable<bool>(
-                    (await connection.ReadAsync<bool?>(token, "SELECT delivered FROM orders WHERE id = @Id FOR UPDATE", new { id })).SingleOrDefault()),
-                () => OrderError.NotFound)
+    private static async Task<Result<long, OrderError>> Replace(NpgsqlConnection connection, long id, NewOrder order, CancellationToken token) =>
+        await Option.FromNullable<bool>(
+                (await connection.ReadAsync<bool?>(token, "SELECT delivered FROM orders WHERE id = @Id FOR UPDATE", new { id })).SingleOrDefault())
+            .ToResult(() => OrderError.NotFound)
             .Ensure(delivered => !delivered, _ => OrderError.Delivered)
-            .Bind(_ => AsyncReaderResult.FromTask<NpgsqlConnection, long, OrderError>(async (connection, token) =>
+            .MapAsync(async _ =>
             {
                 await connection.ExecuteAsync(token, "UPDATE orders SET description = @Description WHERE id = @Id", new { id, order.Description });
                 await connection.ExecuteAsync(token, "DELETE FROM order_lines WHERE order_id = @Id", new { id });
                 await InsertLines(connection, id, order.Lines, token);
                 return id;
-            }));
+            });
 
     private static async Task InsertLines(NpgsqlConnection connection, long orderId, NonEmpty<NewOrderLine> lines, CancellationToken token)
     {

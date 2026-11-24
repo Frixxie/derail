@@ -8,9 +8,6 @@ Derail is a lightweight library of functional programming primitives for C# 15 o
 - **`Result<T, TError>`** — an operation that may fail: `Ok<T>` or `Error<TError>`. Stops at the first error.
 - **`Validation<T, TError>`** — independent checks: `Valid<T>` or `Invalid<TError>`. Collects every error.
 - **`NonEmpty<T>`** — an immutable ordered collection with a required first element.
-- **`Writer<T, TEvent>`** — a value paired with ordered events, without emitting them.
-- **`Reader<TEnv, T>` / `ReaderResult<TEnv, T, TError>`** — reusable computations with explicit dependencies.
-- **`AsyncReaderResult<TEnv, T, TError>`** — a reusable async workflow that receives its dependencies and cancellation token at execution.
 
 `Option`, `Result`, and `Validation` are native C# unions.
 
@@ -73,19 +70,17 @@ in the invalid branch of `Match`. See the [changelog](https://github.com/Frixxie
 - C# infers `Option.Some(value)` from its argument. A result factory must also
   specify the type of the case it does not construct: `Result.Ok<int, string>(3)`.
   With an expected type, a case constructor is shorter: `Result<int, string> r = new Ok<int>(3);`.
-  Similarly, a constant reader factory needs the environment type even though its value does not use it.
 - Nullable annotations describe the **payload**, not the case. `Result.Ok<string?, int>(null)`
-  is successful; `Option.FromNullable((string?)null)` is absent. Reference-type
-  readers, writers, and non-empty collections require constructed instances.
+  is successful; `Option.FromNullable((string?)null)` is absent. A non-empty
+  collection is a reference type and requires a constructed instance.
 - Plain values compose immediately. C# evaluates arguments before calling `Zip`;
   a result can skip its combiner but cannot undo work that produced either argument.
-  Reader `Zip` instead runs its computations left to right at `Run`; a failing
-  reader skips the right computation. `Traverse` invokes its mapper during one
+  `Traverse` invokes its mapper during one
   ordered pass. See [default initialization](#default-initialization) and [equality](#equality).
 - Async `Option` and `Result` pipelines support both `Task` and `ValueTask` for
   dependent I/O. `Map` takes a synchronous callback; `MapAsync` awaits one.
   For a synchronous operation without a wrapper overload, await the input first.
-  `AsyncReaderResult.Run` uses `Task`; validation remains synchronous and applicative.
+  Validation remains synchronous and applicative.
 - Callback exceptions are not converted into typed errors. An async combinator
   that forwards a delegate's task can throw before returning it if that delegate
   throws synchronously. Await the whole call inside the `try` when handling an
@@ -125,7 +120,7 @@ For a rule handled in one place, an `if`, a `switch`, or `TryParse` with an earl
 
 Use typed errors for expected outcomes a caller can act on, such as insufficient funds. Keep exceptions for programming mistakes and unexpected infrastructure failures: a database timeout is different from an account that was not found. Async cancellation propagates as cancellation.
 
-Derail supplies values and functions for composing them. Your application still owns dependency injection, transactions, and event delivery: a `Reader` receives the environment you pass to `Run`, and a `Writer` collects events until you decide what to do with them.
+Derail supplies values and functions for composing them. Your application still owns dependency injection, transactions, and event delivery.
 
 For readability, aim for **at most one level of indirection**: the pipeline should tell the story, and opening one named step should reveal its rule. For example, `Bind((Account a) => Withdraw(a, amount))` is useful when `Withdraw` contains the balance check. A helper that just forwards to another helper makes that rule harder to find.
 
@@ -163,7 +158,7 @@ These rules apply to `default` and to elements of newly allocated arrays:
 | `Option<T>` | Uninitialized; neither `Some<T>` nor `None` | `IsSome` and `IsNone` are both false. Initialize with `Option.Some(value)` or `Option.None` before use. |
 | `Result<T, TError>` | Uninitialized; neither `Ok` nor `Error` | `IsOk` and `IsError` are both false. Initialize with `Result.Ok` or `Result.Error` before use. |
 | `Validation<T, TError>` | Uninitialized; neither `Valid` nor `Invalid` | `IsValid` and `IsInvalid` are both false. Initialize with `Validation.Valid` or `Validation.Invalid` before use. |
-| `NonEmpty`, `Reader`, `ReaderResult`, `AsyncReaderResult`, `Writer` | `null` reference | No instance exists. Construct one before calling its members. |
+| `NonEmpty` | `null` reference | No instance exists. Construct one before calling its members. |
 
 An uninitialized option, result, or validation is a programming error, not a domain outcome.
 Combinators such as `Match`, `Map`, and `GetValueOrDefault` throw
@@ -182,13 +177,6 @@ uninitialized element even after an `Invalid`.
   `EqualityComparer<T>.Default`. `Equals`, `==`, and hash-based collections use
   the same rule. Comparing or hashing can visit every element. As with other
   dictionary keys, keep element equality and hash codes stable while the key is stored.
-- `Writer` uses reference equality. Comparing or hashing a writer does not walk
-  or materialize its event history. To compare outcomes, compare `Value` and
-  use `left.Events.SequenceEqual(right.Events)`; reading `Events` can allocate
-  the flattened event list on first access.
-- `Reader`, `ReaderResult`, and `AsyncReaderResult` also use reference equality. Equality never runs
-  a computation. To compare outcomes for a particular environment, run both
-  readers with that environment and compare their results.
 
 ### Option: values that may be missing
 
@@ -353,152 +341,7 @@ It is a sealed class: `default` is null, not a constructed empty collection.
 Ordinary LINQ operations such as `Where` still return ordinary sequences that may be empty.
 Non-emptiness alone does not validate payment amounts or destination accounts.
 
-### Writer: return events instead of emitting them
-
-```csharp
-sealed record TransferRecorded(AccountNumber From, AccountNumber To, decimal Amount);
-
-Result<Writer<Receipt, TransferRecorded>, TransferError> result = Transfer("1234.56.78901", "1098.76.54321", 200m)
-    .Map((Receipt receipt) => new Writer<Receipt, TransferRecorded>(receipt,
-        [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)]));
-
-// Ok: a receipt paired with one audit event. Error: no Writer is produced.
-```
-
-Writer composition is eager, but events are only data: nothing is logged or published.
-`Map` preserves events; `Bind` and `Zip` append them left-to-right; `MapEvents` transforms them.
-`Writer.Pure<T, TEvent>(value)` starts without events, and `Writer.Tell(event)` records
-one event with a `ValueTuple` result. Event inputs are snapshotted, and callers own delivery policy.
-The banking workflow only calculates a transfer proposal: it does not persist balances or publish
-events. Production code must coordinate persistence and event delivery separately.
-
-#### Which events survive a failure?
-
-Choose the outer type based on what the caller needs when a later step fails.
-The [stock reservation example](tests/Derail.Tests/WriterFailureExamples.cs) checks
-stock, then either proposes reserving one unit or returns `OutOfStock`:
-
-| Return type | Three units available | Out of stock |
-| --- | --- | --- |
-| `Writer<Result<int, ReservationError>, Step>` | `Ok(2)` with `[StockChecked, ReservationProposed]` | `Error(OutOfStock)` with `[StockChecked]` |
-| `Result<Writer<int, Step>, ReservationError>` | `Ok` containing `2` and the same two ordered events | `Error(OutOfStock)`; no writer or event list |
-
-Use the first shape for a trace of an attempt; use the second for a proposal the
-caller should receive only on success. A success-only caller can project a trace
-with `trace.Value.Map(value => trace.Map(_ => value))`. This keeps the original
-events on success and deliberately drops them on error. Once dropped, the trace
-cannot be reconstructed from the error alone. Neither shape publishes anything.
-
-### Reader: compose computations with explicit dependencies
-
-```csharp
-Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> TotalBalance() =>
-    Reader.Ask<IReadOnlyDictionary<AccountNumber, Account>>()
-        .Map((IReadOnlyDictionary<AccountNumber, Account> ledger) =>
-            ledger.Values.Sum((Account account) => account.Balance));
-
-Reader<IReadOnlyDictionary<AccountNumber, Account>, decimal> report = TotalBalance();
-decimal total = report.Run(Ledger); // 6050m
-decimal checkingOnly = report.Run(new Dictionary<AccountNumber, Account>
-{
-    [Checking.Number] = Checking,
-}); // 50m
-```
-
-`Reader` defers work until `Run`, uses the same environment throughout `Bind` and `Zip`,
-and reruns the computation on each invocation. `Local` adapts an outer environment;
-`Reader.Pure<TEnv, T>(value)` ignores it. Delegates and reference values are not cloned,
-and neither purity nor thread safety is enforced.
-
-`Reader`, `ReaderResult`, and `AsyncReaderResult` execute nested delegates. For an unbounded collection,
-iterate inside one computation instead of chaining one `Map` or `Bind` per item;
-the latter consumes stack as the chain grows. See the [large-chain measurements](benchmarks/large-chains.md).
-
-`ReaderResult<TEnv, T, TError>` combines this with Derail's short-circuiting `Result`:
-
-```csharp
-ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError>
-    AuditedTransfer(string fromInput, string toInput, decimal amount) =>
-    new((IReadOnlyDictionary<AccountNumber, Account> ledger) => Transfer(fromInput, toInput, amount, ledger)
-        .Map((Receipt receipt) => new Writer<Receipt, TransferRecorded>(receipt,
-            [new TransferRecorded(receipt.From, receipt.To, receipt.Amount)])));
-
-ReaderResult<IReadOnlyDictionary<AccountNumber, Account>, Writer<Receipt, TransferRecorded>, TransferError> workflow =
-    AuditedTransfer("1234.56.78901", "1098.76.54321", 200m);
-Result<Writer<Receipt, TransferRecorded>, TransferError> result = workflow.Run(Ledger); // Ok: receipt and audit event
-```
-
-It supports `Map`, `MapError`, `Bind`, `Recover`, `Zip`, `Local`, and LINQ.
-`Zip` never runs the right computation after a left error. `Recover` handles an error
-with another computation using the same environment. `ReaderResult.FromReader<TEnv, T, TError>`
-lifts an infallible reader, and `ToReader()` exposes the underlying result-valued reader.
-The banking example overloads `Transfer` to accept the supplied ledger and threads it through
-account lookups. Running the same workflow with only 100m in savings returns `InsufficientFunds`
-instead of a Writer. See [`BankingExamples.cs`](tests/Derail.Tests/BankingExamples.cs) for the
-executable examples and [`PrimitiveExamples.cs`](tests/Derail.Tests/PrimitiveExamples.cs) for a pricing example.
-
-`Reader`, `Writer`, and `NonEmpty` are sealed classes, not unions: they wrap a computation,
-pair a value with events, and require a head element respectively. Their constructors and
-immutable collection storage protect these invariants; none needs alternative union cases.
-
 ### Async
-
-#### Asynchronous ReaderResult
-
-Build an `AsyncReaderResult` once and run it with the environment and token for
-each request. For example, with an open database connection:
-
-```csharp
-var lookup = OrderLookup.Status(orderId); // No query yet.
-Result<string, LookupError> status = await lookup.Run(connection, cancellationToken);
-```
-
-[`OrderLookup.cs`](tests/Derail.Tests/Examples/OrderLookup.cs) validates the ID before
-issuing a parameterized query. A missing row returns `NotFound`; database exceptions
-and cancellation propagate to the caller. `Recover` handles only typed errors.
-`Bind`, `Recover`, and sequential `Zip` share the environment and token. `Local`
-adapts a larger environment; `Map`, `MapError`, `Ensure`, and LINQ compose without
-executing. Lift existing values with `FromResult` and computations with `FromReaderResult`.
-
-`Run` returns `Task<Result<T, TError>>`, matching common I/O APIs such as
-`ExecuteScalarAsync`. `ValueTask` can save allocations for frequently synchronous
-operations, but has single-consumption constraints; there is one `Task`-based
-workflow API. A pre-canceled token prevents execution. Once I/O starts, cancellation
-is cooperative: forward the supplied token to the underlying operation.
-
-Keep the number of composed steps bounded: `Run` enters the preceding `Map` or
-`Bind` synchronously, even when the underlying I/O eventually yields. For a batch
-whose size is known only at run time, iterate **inside one workflow**. For example,
-this reader sums a stream of quantities and stops reading at the first invalid item:
-
-```csharp
-var totalQuantity = new AsyncReaderResult<IAsyncEnumerable<int>, long, string>(async (quantities, token) =>
-{
-    long total = 0;
-    await foreach (var quantity in quantities.WithCancellation(token))
-    {
-        if (quantity < 0) return new Error<string>("negative-quantity");
-        total += quantity;
-    }
-    return new Ok<long>(total);
-});
-```
-
-#### Bringing existing values into a reader workflow
-
-| Starting point | Conversion | What happens at `Run` |
-| --- | --- | --- |
-| An already computed `Result<T, E>` | `ReaderResult.FromResult<TEnv, T, E>(result)` | Returns the same success or error in every environment; the original operation is not repeated. |
-| An environment lookup returning `Option<T>` | `ReaderResult.FromLookup(lookup, whenNone)` | Calls the lookup once per run. `Some(null)` is a success; only `None` calls the error factory. |
-| An async lookup returning `Task<Option<T>>` | `AsyncReaderResult.FromLookup(lookup, whenNone)` | Awaits the lookup once per run with the environment and token; only `None` calls the error factory. |
-| An async operation that has no domain error, such as a write | `AsyncReaderResult.FromTask<TEnv, T, E>((env, token) => ...)` | Awaits it once per run and succeeds with its value. Exceptions and cancellation still propagate. |
-| An infallible `Reader` needed in an async fallible workflow | `AsyncReaderResult.FromReaderResult(ReaderResult.FromReader<TEnv, T, E>(reader))` | Runs the synchronous reader with the supplied environment; lifting it does not schedule background work. |
-| An existing `Writer<T, E>` needed in an ordinary reader | `Reader.Pure<TEnv, Writer<T, E>>(writer)` | Returns the writer itself, with its ordered events intact. Lifting only `writer.Value` discards those events. |
-
-The [executable shipping quote](tests/Derail.Tests/Examples/ShippingQuote.cs) combines an
-already priced subtotal with a carrier rate looked up at `Run`. It keeps the
-original error or the writer's ordered events. In contrast, `Result.ToOption()`
-explicitly discards the error: converting back can supply a new error, not restore the old one.
 
 #### Async combinators on Option and Result
 
@@ -566,8 +409,6 @@ underlying async call inside the callback.
 Use `Flatten()` in place of `Bind(inner => inner)` when both layers are the same
 primitive. For example, `Option.Some(Option.Some(3)).Flatten()` returns `Some(3)`;
 `None` at either level remains `None`. A nested `Result` keeps the first error.
-A flattened `Reader` runs both layers with the same environment at `Run`, and a
-flattened `Writer` keeps the inner value with outer events before inner events.
 
 ### Collecting a sequence of values
 
@@ -601,8 +442,8 @@ a required list keeps the guarantee that it has at least one element.
 
 ## Build, test and benchmark
 
-The [orders and shipments API](examples/Orders/README.md) uses every primitive except the
-synchronous `Reader` and `ReaderResult` in an ASP.NET Core API backed by PostgreSQL and DbReader.
+The [orders and shipments API](examples/Orders/README.md) uses every primitive
+in an ASP.NET Core API backed by PostgreSQL and DbReader.
 
 ```sh
 dotnet build
@@ -637,7 +478,7 @@ are disposable directories inside the container. Only the repository is mounted 
 ## Layout
 
 ```
-src/Derail/                  Library: Option, Result, Validation, NonEmpty, Writer, Reader, async extensions
+src/Derail/                  Library: Option, Result, Validation, NonEmpty, async extensions
 src/Derail.Analyzers/        Roslyn analyzer shipped in the package (DRL001)
 tests/Derail.Tests/          Unit, property-based and example tests
 tests/Derail.Analyzers.Tests Analyzer tests against in-process compilations

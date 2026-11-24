@@ -2,12 +2,12 @@ using Derail;
 
 namespace Orders;
 
+internal sealed record Shipped(Shipment Shipment, IReadOnlyList<string> Events);
+
 internal static class Shipping
 {
-    public static Writer<Shipment, string> Ship(Option<Shipment> current, Shipment requested) =>
+    public static Shipped Ship(Option<Shipment> current, Shipment requested) =>
         current.Match(
-            shipped => shipped == requested
-                ? Writer.Pure<Shipment, string>(requested)
-                : new Writer<Shipment, string>(requested, ["shipment-changed"]),
-            () => new Writer<Shipment, string>(requested, ["order-shipped"]));
+            shipped => new Shipped(requested, shipped == requested ? [] : ["shipment-changed"]),
+            () => new Shipped(requested, ["order-shipped"]));
 }

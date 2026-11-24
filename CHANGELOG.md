@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** Removed `Reader`, `ReaderResult`, `AsyncReaderResult`, and `Writer`.
+  Pass dependencies as ordinary parameters and compose `Task<Result<T, TError>>`
+  pipelines with `BindAsync`, `MapAsync`, and `RecoverAsync`; return events as
+  plain data alongside the value. The orders example shows both approaches.
+
 ## 0.8.0
 
 - **Breaking:** `Option<T>` is a native union again. `default(Option<T>)` matches neither case;

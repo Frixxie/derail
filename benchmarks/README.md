@@ -8,15 +8,15 @@ Run from the repository root with the .NET 11 SDK, either locally or inside the
 dotnet run -c Release --project benchmarks/Derail.Benchmarks -- --filter '*' --job Dry
 
 # Exploratory measurements for a single feature.
-dotnet run -c Release --project benchmarks/Derail.Benchmarks -- --filter '*WriterBenchmarks*' --job Short
+dotnet run -c Release --project benchmarks/Derail.Benchmarks -- --filter '*NonEmptyMapBenchmarks*' --job Short
 
 # Default BenchmarkDotNet measurement job for more reliable comparisons.
-dotnet run -c Release --project benchmarks/Derail.Benchmarks -- --filter '*ReaderExecutionBenchmarks*'
+dotnet run -c Release --project benchmarks/Derail.Benchmarks -- --filter '*ValidationSequenceBenchmarks*'
 ```
 
 BenchmarkDotNet writes reports under `BenchmarkDotNet.Artifacts/` (ignored by version
 control). `MemoryDiagnoser` reports managed allocations alongside elapsed time.
-Every class checks equivalent values, errors, or event order in `GlobalSetup` before
+Every class checks equivalent values or errors in `GlobalSetup` before
 timing. Fixtures are synthetic and created outside the timed methods.
 
 ## Workloads
@@ -30,22 +30,14 @@ timing. Fixtures are synthetic and created outside the timed methods.
 | `ResultAsyncGuardBenchmarks` | Chain `EnsureAsync` and `TapAsync` on passing, rejected, and already-failed results using completed tasks | Direct branches awaiting the same predicate and observation; measures pipeline overhead without I/O |
 | `NonEmptyMapBenchmarks` | Mapping 1, 8, 32, 1024 elements | An array loop producing the same elements |
 | `NonEmptyConstructionBenchmarks` | Head/tail construction, sequence conversion, repeated singleton append | Direct head/tail construction |
-| `WriterBenchmarks` | Repeated single-event `Bind` versus bulk construction | A local list accumulator, snapshotted into a Writer |
-| `WriterReadBenchmarks` | First read of an unflattened tree vs. last-event lookup on a cached writer | 1,024 and 4,096 events; construction excluded |
-| `ReaderConstructionBenchmarks` | Building map/bind/result pipelines up to 4,096 steps | Equivalent nested delegates |
-| `ReaderExecutionBenchmarks` | Repeated execution of prebuilt pipelines | Direct loop; nested delegates also measured |
-| `ReaderResultShortCircuitBenchmarks` | Prebuilt bind chains, either successful or failing before the first continuation | Direct short-circuiting control flow |
 | `ValidationSequenceBenchmarks` | All-valid, all-invalid, alternating batches up to 4,096 items | Local list accumulation with equivalent ordered results |
 | `TraversalBenchmarks` | `Option`/`Result` sequence of prebuilt inputs and traversal of raw inputs; `Validation` traversal of raw inputs | All succeed vs. odd items fail: short-circuit at item two vs. accumulating every failure |
 
 ## Interpretation
 
-See [Large composition chains](large-chains.md) for the stack-reserve probe, Writer
-read costs, repeated append scaling, and updated validation measurements.
+See [Large composition chains](large-chains.md) for repeated append scaling and
+updated validation measurements.
 
-- Construction and repeated execution are separate Reader benchmarks. `Bind`
-  creates the next reader during execution; those allocations deliberately remain
-  part of the execution measurement.
 - Baselines express equivalent outputs, not equivalent abstractions or safety
   guarantees. The JIT may optimize a direct loop more aggressively than delegates.
 - NonEmpty arrays and singleton fixtures are prepared in setup. The singleton
@@ -53,9 +45,6 @@ read costs, repeated append scaling, and updated validation measurements.
   one it simply returns the existing singleton.
   `SnapshotThenConstruct` retains the original conversion algorithm as a local
   comparison, so conversion changes can be checked for both allocation and latency.
-- Writer `Bulk` receives precomputed events and isolates snapshot cost. Unlike
-  `Direct` and `Bind`, it does not compute events inside the timed method. There
-  is no event delivery, logging, or I/O in these workloads.
 - Validation errors are integers to isolate accumulation rather than string
   allocation. `FailureEvery = 0` means all valid, `1` all invalid, and `2`
   alternating (starting with an error).
@@ -68,7 +57,8 @@ read costs, repeated append scaling, and updated validation measurements.
 ## Improvement candidates
 
 These were the hypotheses at the initial benchmark revision (`2064b105`), before
-the optimization work below:
+the optimization work below. `Reader` and `Writer` have since been removed from the
+library; their entries and measurements are kept as history.
 
 1. **Writer event accumulation:** repeated immutable-array concatenation copies
    the accumulated prefix on every bind, giving quadratic total copying for a
@@ -124,8 +114,7 @@ Reproduce the focused run:
 
 ```sh
 dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
-  --filter '*WriterBenchmarks*1024*' '*NonEmptyMapBenchmarks*1024*' \
-    '*ValidationSequenceBenchmarks*1024*FailureEvery: 1*' '*ReaderExecutionBenchmarks*32*' \
+  --filter '*NonEmptyMapBenchmarks*1024*' '*ValidationSequenceBenchmarks*1024*FailureEvery: 1*' \
   --job Short --artifacts BenchmarkDotNet.Artifacts/exploratory
 ```
 
@@ -186,6 +175,6 @@ To rerun the optimized workloads:
 
 ```sh
 dotnet run -c Release --project benchmarks/Derail.Benchmarks -- \
-  --filter '*NonEmpty*1024*' '*ValidationSequenceBenchmarks*1024*' '*ReaderExecutionBenchmarks*32*' \
+  --filter '*NonEmpty*1024*' '*ValidationSequenceBenchmarks*1024*' \
   --job Short --artifacts BenchmarkDotNet.Artifacts/optimized
 ```

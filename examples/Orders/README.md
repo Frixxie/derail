@@ -21,11 +21,11 @@ Two more endpoints change shipments: `PUT /orders/{id}/shipment/delivery` marks 
 - **`Validation.Zip`** combines independent fields, so one `400` lists every invalid field.
 - **`NonEmpty`, `Validation.Traverse` and `MapErrors`** validate [order lines](OrderEndpoints.cs). Traversing a `NonEmpty` keeps the validated lines non-empty, and `MapErrors` prefixes each error with its line, such as `lines[2].quantity`. The [shipment import](ShipmentEndpoints.cs) validates its rows in the same way.
 - **`Option`** marks absent values: a missing row, an unset query parameter (`GetValueOrDefault` supplies the default and `Match` builds the optional `shipped` filter), and an unshipped order, where `Zip` combines carrier and tracking.
-- **`AsyncReaderResult`** composes a workflow from steps. `FromLookup` turns a missing row into a typed error, `Ensure` applies a rule such as the delivery rule, `Bind` runs the next step, and `FromTask` wraps a write that cannot fail with a domain error. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success. The import loops inside one step instead of chaining a `Bind` per row.
+- **Async `Result` pipelines** compose a workflow from steps that take the connection and token. `ToResult` turns a missing row into a typed error, `Ensure` applies a rule such as the delivery rule, `BindAsync` runs the next fallible step, and `MapAsync` runs a write that cannot fail with a domain error. [`InTransaction`](Transactions.cs) runs a workflow for each request and commits only on success. The import loops over its rows instead of chaining a `Bind` per row.
 - **Typed errors:** `ShipmentError` and `OrderError` say why a step failed, and one `switch` for each resource maps them to `404`, `409` or `422`.
 - **SQL** is always a compile-time constant with parameters for every input, including the list filters.
-- **`Recover`** makes creating an order safe to retry. The insert step fails with the used idempotency key, and `Replay` returns the stored order or a `KeyReused` error.
-- **`Writer`:** [`Shipping.Ship`](Shipping.cs) is a pure function that returns the shipment with the events it implies; `Save` writes both in the same transaction.
+- **`RecoverAsync`** makes creating an order safe to retry. The insert step fails with the used idempotency key, and `Replay` returns the stored order or a `KeyReused` error.
+- **Pure domain logic:** [`Shipping.Ship`](Shipping.cs) returns the shipment with the events it implies; `Save` writes both in the same transaction.
 
 ## Try it
 

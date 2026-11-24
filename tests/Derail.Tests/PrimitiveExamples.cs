@@ -5,28 +5,6 @@ namespace Derail.Tests;
 
 public class PrimitiveExamples
 {
-    private sealed record Pricing(decimal UnitPrice, int MaximumQuantity);
-    private sealed record Quoted(int Quantity, decimal Total);
-
-    private static ReaderResult<Pricing, Writer<decimal, Quoted>, string> Quote(int quantity) =>
-        new((Pricing config) => quantity > 0 && quantity <= config.MaximumQuantity
-            ? Result.Ok<Writer<decimal, Quoted>, string>(
-                new(quantity * config.UnitPrice, [new Quoted(quantity, quantity * config.UnitPrice)]))
-            : Result.Error<Writer<decimal, Quoted>, string>("Quantity is outside the allowed range"));
-
-    [Fact]
-    public void Quote_UsesExplicitConfigurationAndReturnsEventsWithoutPublishingThem()
-    {
-        ReaderResult<Pricing, Writer<decimal, Quoted>, string> workflow = Quote(3);
-        Result<Writer<decimal, Quoted>, string> result = workflow.Run(new Pricing(10m, 5));
-
-        Writer<decimal, Quoted> quote = result.Match(
-            (Writer<decimal, Quoted> value) => value, (string error) => throw new InvalidOperationException(error));
-        quote.Value.Should().Be(30m);
-        quote.Events.Should().Equal(new Quoted(3, 30m));
-        workflow.Run(new Pricing(10m, 2)).IsError.Should().BeTrue();
-    }
-
     [Fact]
     public void NonEmpty_ModelsARequiredBatch()
     {
