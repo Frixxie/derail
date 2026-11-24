@@ -209,6 +209,7 @@ Option<int> three = Option.Some(Option.Some(3)).Flatten();
 
 ## More
 
+- AI agents: use the [Derail skill](.agents/skills/derail/SKILL.md) in this repo, or copy its `derail` folder into `.agents/skills/` in a consuming project.
 - Runnable examples: [`BankingExamples.cs`](tests/Derail.Tests/BankingExamples.cs) and the [orders API](examples/Orders/README.md) (ASP.NET Core + PostgreSQL).
 - Upgrading: the API may change on `0.x`; see the [changelog](CHANGELOG.md) for migration notes.
 - Benchmarks: [benchmarks/README.md](benchmarks/README.md).
