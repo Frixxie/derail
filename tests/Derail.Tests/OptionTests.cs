@@ -83,12 +83,29 @@ public class OptionTests
         }
 
         [Fact]
-        public void IsSome_And_IsNone_ForDefault()
+        public void DefaultArrayElement_IsTheNoneCase()
         {
-            Option<int> option = default;
+            var options = new Option<int>[1];
+            var option = options[0];
+            Option<int> none = Option.None;
 
             option.IsSome.Should().BeFalse();
-            option.IsNone.Should().BeFalse();
+            option.IsNone.Should().BeTrue();
+            (option is None).Should().BeTrue();
+            option.Should().Be(none);
+            option.Should().NotBe(Option.Some(0));
+            option.Match(_ => "some", () => "none").Should().Be("none");
+        }
+
+        [Fact]
+        public async Task MappingDefault_PreservesNoneAcrossSyncAndAsyncPipelines()
+        {
+            Option<int> option = default;
+            Option<string> none = Option.None;
+
+            option.Map(x => x.ToString()).Should().Be(none);
+            (await option.MapAsync(x => Task.FromResult(x.ToString()))).Should().Be(none);
+            (await option.MapAsync(x => ValueTask.FromResult(x.ToString()))).Should().Be(none);
         }
 
         [Fact]

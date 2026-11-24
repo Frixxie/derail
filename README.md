@@ -41,6 +41,10 @@ The examples below come from [`BankingExamples.cs`](tests/Derail.Tests/BankingEx
 
 ### Option: values that may be missing
 
+`default(Option<T>)` is `None`, including in newly allocated arrays. It matches the
+`None` pattern and compares equal to an explicitly constructed `None` option.
+`Option.Some(0)` is a present value.
+
 ```csharp
 Option<Account> FindAccount(AccountNumber number) =>
     ledger.TryGetValue(number, out Account? account) ? Option.Some(account) : Option.None;

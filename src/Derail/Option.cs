@@ -7,11 +7,24 @@ public readonly record struct Some<T>(T Value);
 public readonly record struct None;
 
 /// <summary>An optional value: either <see cref="Some{T}"/> or <see cref="None"/>.</summary>
-public union Option<T>(Some<T>, None);
+/// <remarks>The default value is <see cref="None"/>.</remarks>
+[System.Runtime.CompilerServices.Union]
+public readonly struct Option<T>
+{
+    // Null storage denotes None; even Some(null) is stored as a boxed Some<T>.
+    private readonly object? _some;
+
+    public Option(Some<T> value) => _some = value;
+    public Option(None value) => _some = null;
+
+    public object Value => _some ?? Option.BoxedNone;
+}
 
 /// <summary>Factory methods for <see cref="Option{T}"/>.</summary>
 public static class Option
 {
+    internal static readonly object BoxedNone = new None();
+
     /// <summary>The absent value. Converts implicitly to any <see cref="Option{T}"/>.</summary>
     public static None None => default;
 
