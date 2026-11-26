@@ -230,7 +230,7 @@ dotnet test --project tests/Derail.Tests
 dotnet test --project tests/Derail.Analyzers.Tests
 ```
 
-To release, bump the version in `src/Derail/Derail.csproj` and push a matching tag (`v0.9.0`); the [release workflow](.github/workflows/release.yml) publishes to NuGet.
+To release, bump the version in `src/Derail/Derail.csproj` and push a matching tag (`v0.10.0`); the [release workflow](.github/workflows/release.yml) publishes to NuGet.
 
 ## License
 

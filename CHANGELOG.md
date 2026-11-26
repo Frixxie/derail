@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
+
+- **Breaking:** `Ok<T>` and `Error<TError>` are now sealed record classes rather than record structs. `Result<T, TError>` remains a native union. Recompile consumers, replace any reliance on `default(Ok<T>)` or `default(Error<TError>)` with explicit case construction, and update any `struct` constraints applied to these cases. Existing factory calls and case patterns still work.
+- `Map` and `Bind` forward an existing error case without allocating another one. In the `Map` → `Bind` → `Match` benchmark, an initial error now allocates 24 B instead of 72 B; success and errors created during `Bind` still allocate 72 B.
 
 - **Breaking:** Removed the three- and four-input `Validation.Zip` overloads. Use binary `Zip` for two checks. For more inputs, write the combining function one parameter at a time and use `first.Map(create).Apply(second).Apply(third)`. Errors still accumulate left to right.
 
