@@ -157,11 +157,6 @@ public class ValidationTests
             Parse("x").Zip(Parse("2"), (a, b) => a + b).Should().Be(Validation.Invalid<int, string>("'x' is not a number"));
         }
 
-        [Fact]
-        public void ThreeWay_AccumulatesErrorsInOrder() =>
-            Parse("x").Zip(Parse("2"), Parse("z"), (a, b, c) => a + b + c)
-                .Should().Be(Validation.Invalid<int, string>("'x' is not a number", "'z' is not a number"));
-
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
@@ -174,23 +169,19 @@ public class ValidationTests
             Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() => left.Zip(right, (a, b) => a + b));
         }
 
-        [Fact]
-        public void FourWay_DoesNotHideUninitializedFourthInputAfterAnError()
-        {
-            Validation<int, string> uninitialized = default;
-            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() =>
-                Failed.Zip(Parse("2"), Parse("3"), uninitialized, (a, b, c, d) => a + b + c + d));
-        }
-
-        [Fact]
-        public void ThreeWay_CombinesValidValues() =>
-            Parse("1").Zip(Parse("2"), Parse("3"), (a, b, c) => a + b + c)
-                .Should().Be(Validation.Valid<int, string>(6));
     }
 
     public class Apply
     {
         private static readonly Func<int, int> Increment = x => x + 1;
+
+        [Fact]
+        public void DoesNotHideUninitializedArgumentAfterAnError()
+        {
+            Validation<int, string> uninitialized = default;
+            Assert.Throws<System.Runtime.CompilerServices.SwitchExpressionException>(() =>
+                Validation.Invalid<Func<int, int>, string>("earlier error").Apply(uninitialized));
+        }
 
         [Fact]
         public void AppliesValidFunction_ToValidValue() =>

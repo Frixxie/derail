@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** Removed the three- and four-input `Validation.Zip` overloads. Use binary `Zip` for two checks. For more inputs, write the combining function one parameter at a time and use `first.Map(create).Apply(second).Apply(third)`. Errors still accumulate left to right.
+
 ## 0.9.0
 
 - **Breaking:** Removed `Reader`, `ReaderResult`, `AsyncReaderResult`, and `Writer`.

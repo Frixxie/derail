@@ -130,16 +130,22 @@ Use `Recover` to try an alternative after an error, and `TapError` to observe on
 
 ## Validation
 
+Use `Zip` for two independent checks, or `Map` and `Apply` to supply one validated argument at a time:
+
 ```csharp
+var area = width.Zip(height, (w, h) => w * h);
+
+static Func<AccountNumber, Func<decimal, AccountApplication>> ApplicationFor(string owner) =>
+    number => deposit => new AccountApplication(owner, number, deposit);
+
 Validation<AccountApplication, string> ValidateApplication(string owner, string number, decimal deposit) =>
-    ValidateOwner(owner).Zip(ValidateNumber(number), ValidateDeposit(deposit),
-        (o, n, d) => new AccountApplication(o, n, d));
+    ValidateOwner(owner).Map(ApplicationFor).Apply(ValidateNumber(number)).Apply(ValidateDeposit(deposit));
 
 ValidateApplication("", "12", 10m);
 // Invalid: "Owner is required", "'12' is not an account number", "Initial deposit must be at least 100.00"
 ```
 
-`Zip` takes up to four validations. Errors keep argument order, and the constructor runs only when all are valid. The error list is a `NonEmpty<TError>`, so there is always a first error:
+`Map(ApplicationFor)` supplies the owner; each `Apply` supplies the next argument. Errors keep argument order, and the constructor runs only when all inputs are valid. The error list is a `NonEmpty<TError>`, so there is always a first error:
 
 ```csharp
 string summary = ValidateApplication("", "12", 10m).Match(

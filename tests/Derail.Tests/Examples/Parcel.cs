@@ -10,7 +10,8 @@ internal sealed record Parcel(int LengthCm, int WidthCm, int HeightCm, decimal W
         var width = Dimension(widthCm, "widthCm");
         var height = Dimension(heightCm, "heightCm");
         var weight = weightKg > 0 ? Validation.Valid<decimal, string>(weightKg) : Validation.Invalid<decimal, string>("weightKg");
-        return length.Zip(width, height, weight, (l, w, h, kg) => new Parcel(l, w, h, kg));
+        static Func<int, Func<int, Func<decimal, Parcel>>> WithLength(int l) => w => h => kg => new Parcel(l, w, h, kg);
+        return length.Map(WithLength).Apply(width).Apply(height).Apply(weight);
     }
 
     private static Validation<int, string> Dimension(int cm, string field) =>

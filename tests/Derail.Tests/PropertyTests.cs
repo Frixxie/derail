@@ -221,7 +221,7 @@ public class ValidationProperties
     }
 
     [Property]
-    public bool FourWayZip_PreservesOrderAndCombinesExactlyOnceOnSuccess(
+    public bool ApplyChain_PreservesOrderAndCombinesExactlyOnceOnSuccess(
         bool aOk, bool bOk, bool cOk, bool dOk, int a, int b, int c, int d)
     {
         Validation<int, string> Field(bool valid, int value, string name) => valid
@@ -229,7 +229,8 @@ public class ValidationProperties
             : Validation.Invalid<int, string>(name, name + "!");
         var fields = new[] { Field(aOk, a, "a"), Field(bOk, b, "b"), Field(cOk, c, "c"), Field(dOk, d, "d") };
         var calls = 0;
-        var actual = fields[0].Zip(fields[1], fields[2], fields[3], (w, x, y, z) => { calls++; return (w, x, y, z); });
+        Func<int, Func<int, Func<int, (int, int, int, int)>>> Combine(int w) => x => y => z => { calls++; return (w, x, y, z); };
+        var actual = fields[0].Map(Combine).Apply(fields[1]).Apply(fields[2]).Apply(fields[3]);
         var errors = fields.SelectMany(Errors).ToArray();
         return actual.Match(values => errors.Length == 0 && values == (a, b, c, d) && calls == 1,
             observed => observed.SequenceEqual(errors) && calls == 0);
@@ -326,13 +327,14 @@ public class ValidationProperties
         Make(ok, value, errors).ToResult().ToValidationFromErrors().Equals(Make(ok, value, errors));
 
     [Property]
-    public bool ThreeWayZip_MatchesNestedBinaryZip(
+    public bool ApplyChain_MatchesNestedBinaryZip(
         bool aOk, int a, NonEmptyArray<string> aErrors,
         bool bOk, int b, NonEmptyArray<string> bErrors,
         bool cOk, int c, NonEmptyArray<string> cErrors)
     {
         var (va, vb, vc) = (Make(aOk, a, aErrors), Make(bOk, b, bErrors), Make(cOk, c, cErrors));
-        return va.Zip(vb, vc, (x, y, z) => (x, y, z))
+        static Func<int, Func<int, (int, int, int)>> Combine(int x) => y => z => (x, y, z);
+        return va.Map(Combine).Apply(vb).Apply(vc)
             .Equals(va.Zip(vb, (x, y) => (x, y)).Zip(vc, (xy, z) => (xy.x, xy.y, z)));
     }
 

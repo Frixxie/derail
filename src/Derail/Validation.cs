@@ -23,26 +23,6 @@ public sealed class Invalid<TError> : IEquatable<Invalid<TError>>
 
     internal Invalid<TError> Concat(Invalid<TError> other) => new(Errors.Append(other.Errors));
 
-    // Joins every present error group in one copy, so multi-way Zip stays linear in the number of errors.
-    internal static Invalid<TError> Collect(params ReadOnlySpan<Invalid<TError>?> failures)
-    {
-        while (!failures.IsEmpty && failures[0] is null) failures = failures[1..];
-        if (failures.IsEmpty) throw new System.Diagnostics.UnreachableException("Collect requires at least one failure.");
-        var first = failures[0]!;
-        var remaining = failures[1..];
-        var extraCount = 0;
-        foreach (var failure in remaining) extraCount = checked(extraCount + (failure?.Errors.Count ?? 0));
-        if (extraCount == 0) return first;
-
-        var tail = ImmutableArray.CreateBuilder<TError>(checked(first.Errors.Count - 1 + extraCount));
-        first.Errors.CopyTailTo(tail);
-        foreach (var failure in remaining)
-        {
-            failure?.Errors.CopyTo(tail);
-        }
-        return new(new NonEmpty<TError>(first.Errors.Head, tail.MoveToImmutable()));
-    }
-
     internal Invalid<TNewError> Select<TNewError>(Func<TError, TNewError> map) =>
         new(Errors.Map(map));
 
@@ -172,29 +152,6 @@ public static class ValidationExtensions
                 (Valid<T>, Invalid<TError> b) => b,
             };
 
-        /// <summary>Combines three validations, collecting the errors of all.</summary>
-        public Validation<TResult, TError> Zip<T2, T3, TResult>(
-            Validation<T2, TError> second,
-            Validation<T3, TError> third,
-            Func<T, T2, T3, TResult> combine) =>
-            (validation, second, third) switch
-            {
-                (Valid<T> a, Valid<T2> b, Valid<T3> c) => new Valid<TResult>(combine(a.Value, b.Value, c.Value)),
-                _ => Invalid<TError>.Collect(FailureOf(validation), FailureOf(second), FailureOf(third)),
-            };
-
-        /// <summary>Collects errors from four validations in order. Invokes the combiner only if all four are valid.</summary>
-        public Validation<TResult, TError> Zip<T2, T3, T4, TResult>(
-            Validation<T2, TError> second,
-            Validation<T3, TError> third,
-            Validation<T4, TError> fourth,
-            Func<T, T2, T3, T4, TResult> combine) =>
-            (validation, second, third, fourth) switch
-            {
-                (Valid<T> a, Valid<T2> b, Valid<T3> c, Valid<T4> d) => new Valid<TResult>(combine(a.Value, b.Value, c.Value, d.Value)),
-                _ => Invalid<TError>.Collect(FailureOf(validation), FailureOf(second), FailureOf(third), FailureOf(fourth)),
-            };
-
         /// <summary>
         /// Chains a validation that depends on the valid value. Unlike <c>Zip</c>, this short-circuits:
         /// when invalid, <paramref name="next"/> is not invoked and its errors are not collected.
@@ -225,11 +182,4 @@ public static class ValidationExtensions
             function.Zip(argument, (f, x) => f(x));
     }
 
-    // Null for a valid input; an uninitialized input throws rather than being treated as valid.
-    private static Invalid<TError>? FailureOf<T, TError>(Validation<T, TError> validation) =>
-        validation switch
-        {
-            Valid<T> => null,
-            Invalid<TError> i => i,
-        };
 }

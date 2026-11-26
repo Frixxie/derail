@@ -50,10 +50,12 @@ internal static class OrderEndpoints
         ApiInput.Optional<int>(limit, "limit", int.TryParse)
             .Map(value => value.GetValueOrDefault(50))
             .Rule(value => value is >= 1 and <= 100, "limit", "out-of-range")
-            .Zip(
-                ApiInput.Optional<long>(after, "after", long.TryParse).Map(value => value.GetValueOrDefault(0)),
-                ApiInput.Optional<bool>(shipped, "shipped", bool.TryParse),
-                (pageLimit, pageAfter, pageShipped) => new OrderPage(pageLimit, pageAfter, pageShipped));
+            .Map(PageWithLimit)
+            .Apply(ApiInput.Optional<long>(after, "after", long.TryParse).Map(value => value.GetValueOrDefault(0)))
+            .Apply(ApiInput.Optional<bool>(shipped, "shipped", bool.TryParse));
+
+    private static Func<long, Func<Option<bool>, OrderPage>> PageWithLimit(int limit) =>
+        after => shipped => new OrderPage(limit, after, shipped);
 
     private static Validation<NewOrder, FieldError> Validate(OrderRequest request) =>
         ApiInput.Field(request.Description, "description", 200)

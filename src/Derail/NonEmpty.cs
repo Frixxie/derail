@@ -42,8 +42,6 @@ public sealed class NonEmpty<T> : IReadOnlyList<T>, IEquatable<NonEmpty<T>>
         destination.AddRange(_tail);
     }
 
-    internal void CopyTailTo(ImmutableArray<T>.Builder destination) => destination.AddRange(_tail);
-
     /// <summary>Tests whether both collections have equal elements in the same order.</summary>
     public bool Equals(NonEmpty<T>? other) => ReferenceEquals(this, other)
         || other is not null && Count == other.Count && EqualityComparer<T>.Default.Equals(Head, other.Head)

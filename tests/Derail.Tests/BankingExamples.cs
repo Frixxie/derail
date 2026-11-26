@@ -250,8 +250,10 @@ public class BankingExamples
             : Validation.Invalid<decimal, string>($"Initial deposit must be at least 100.00, was {amount:0.00}");
 
     private static Validation<AccountApplication, string> ValidateApplication(string owner, string number, decimal deposit) =>
-        ValidateOwner(owner).Zip(ValidateNumber(number), ValidateDeposit(deposit),
-            (string o, AccountNumber n, decimal d) => new AccountApplication(o, n, d));
+        ValidateOwner(owner).Map(ApplicationFor).Apply(ValidateNumber(number)).Apply(ValidateDeposit(deposit));
+
+    private static Func<AccountNumber, Func<decimal, AccountApplication>> ApplicationFor(string owner) =>
+        number => deposit => new AccountApplication(owner, number, deposit);
 
     [Fact]
     public void Validation_AcceptsGoodApplication() =>
