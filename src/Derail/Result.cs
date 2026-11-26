@@ -83,7 +83,11 @@ public static class ResultExtensions
 
         /// <summary>Chains a result-returning function when successful.</summary>
         public Result<TResult, TError> Bind<TResult>(Func<T, Result<TResult, TError>> bind) =>
-            result.Match(bind, Result.Error<TResult, TError>);
+            result switch
+            {
+                Ok<T> o => bind(o.Value),
+                Error<TError> e => e,
+            };
 
         /// <summary>Runs a replacement computation on error, possibly changing the error type. Preserves success.</summary>
         public Result<T, TNewError> Recover<TNewError>(Func<TError, Result<T, TNewError>> recover) =>
